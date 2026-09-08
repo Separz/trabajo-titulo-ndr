@@ -1,0 +1,18 @@
+# Datos generados
+logs/zeek/*
+logs/slips/*
+!logs/**/.gitkeep
+
+# Estado local de Containerlab incluyendo clave privada de CA
+clab-ndr-lab/
+
+# Repositorio de Wazuh se clona aparte
+wazuh-docker/
+
+# Secretos locales
+.env
+*.key
+
+# Extra
+notas/
+
