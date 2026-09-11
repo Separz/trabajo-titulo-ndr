@@ -1,0 +1,76 @@
+# Laboratorio emulado NDR - Containerlab
+# - Plano de datos en segmento LAN 10.10.10.0/24 detras de un firewall con NAT
+# - Plano de gestion en red Docker clab-ndr-mgmt donde luego se conecta Wazuh/MISP
+
+# La configuracion de red no se hace con <exec>. Las interfaces conectadas
+# al bridge OVS se reemplazan despues del arranque de los nodos (observado: IPs perdidas
+# y Zeek escuchando una interfaz obsoleta). Toda la configuracion se aplica despues
+# del deploy con el script bash en scripts/config-lab.sh.
+name: ndr-lab
+
+mgmt:
+  network: clab-ndr-mgmt
+  ipv4-subnet: 172.30.30.0/24
+
+topology:
+  defaults:
+    kind: linux
+
+  nodes:
+    # Switch del segmento
+    # Un bridge Open vSwitch en el host soporta port mirroring = SPAN
+    sw1:
+      kind: ovs-bridge
+
+    # Firewall perimetral
+    # un router Linux + nftables con NAT y blocklist
+    fw:
+      image: alpine:3.20
+      binds:
+        - configs/fw/setup.sh:/setup.sh:ro
+      entrypoint: sleep
+      cmd: infinity
+
+    # 'Internet'
+    # servidor C2 simulado (nginx)
+    inet:
+      image: ghcr.io/hellt/network-multitool
+
+    # Equipo gestionado
+    # (futuro agente Wazuh)
+    pc1:
+      image: ghcr.io/hellt/network-multitool
+
+    # Equipo no gestionado que emite beaconing hacia el C2
+    # (BYOD / Wi-Fi) 
+    pc2:
+      image: ghcr.io/hellt/network-multitool
+      binds:
+        - configs/pc2/beacon.sh:/beacon.sh:ro
+
+    # Sensor Zeek en el puerto espejo 
+    # (se inicia con config-lab.sh)
+    zeek:
+      image: zeek/zeek:latest
+      binds:
+        - configs/zeek/start.sh:/start.sh:ro
+        - logs/zeek:/logs
+      entrypoint: sleep
+      cmd: infinity
+
+    # Slips lee los logs de Zeek desde el volumen compartido
+    # (arranque manual)
+    slips:
+      image: stratosphereips/slips:latest
+      binds:
+        - logs/zeek:/zeek_logs:ro
+        - logs/slips:/slips_output
+      entrypoint: sleep
+      cmd: infinity
+
+  links:
+    - endpoints: ["fw:eth1", "sw1:fw-eth1"]
+    - endpoints: ["pc1:eth1", "sw1:pc1-eth1"]
+    - endpoints: ["pc2:eth1", "sw1:pc2-eth1"]
+    - endpoints: ["zeek:eth1", "sw1:zeek-eth1"] # puerto destino del SPAN
+    - endpoints: ["fw:eth2", "inet:eth1"] # enlace WAN
