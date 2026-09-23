@@ -39,7 +39,7 @@ else
   systemctl enable --now ovs-vswitchd.service
 fi
 
-# 4. Esperar hasta 15 s a que el servicio cree su socket
+# 4. Esperar 15 segundos a que el servicio cree su socket
 for _ in $(seq 1 15); do
   if [ -S "$OVS_SOCKET" ]; then
     break

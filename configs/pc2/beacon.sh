@@ -1,7 +1,8 @@
 #!/bin/sh
-# Beaconing simulado: una peticion HTTP al "C2" cada 27 a 33 segundos.
-# Solo corre una instancia: si ya hay un bucle activo, lo detiene antes de lanzar otro.
-# Lo invoca config-lab.sh, que entrega la IP del C2.
+# Beaconing simulado
+# Una peticion HTTP al "C2" cada 27 a 33 segundos
+# Solo corre una instancia, si ya hay un bucle activo lo detiene antes de lanzar otro
+# Lo invoca config-lab.sh, que entrega la ip del C2
 
 C2_IP="${1:-100.64.0.2}"
 PIDFILE=/tmp/beacon.pid
@@ -12,7 +13,7 @@ hay_instancia_previa() {
   [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
 }
 
-# Entrega un numero entre 0 y 255 leyendo un byte de /dev/urandom
+# Entrega random entre 0 y 255
 byte_aleatorio() {
   od -An -N1 -tu1 /dev/urandom
 }

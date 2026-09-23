@@ -5,7 +5,7 @@
 # La configuracion de red no se hace con <exec>. Las interfaces conectadas
 # al bridge OVS se reemplazan despues del arranque de los nodos (observado: IPs perdidas
 # y Zeek escuchando una interfaz obsoleta). Toda la configuracion se aplica despues
-# del deploy con el script bash en scripts/config-lab.sh.
+# del deploy con el script bash en scripts/config-lab.sh
 name: ndr-lab
 
 mgmt:
@@ -42,13 +42,13 @@ topology:
       image: ghcr.io/hellt/network-multitool
 
     # Equipo no gestionado que emite beaconing hacia el C2
-    # (BYOD / Wi-Fi) 
+    # (BYOD / Wi-Fi)
     pc2:
       image: ghcr.io/hellt/network-multitool
       binds:
         - configs/pc2/beacon.sh:/beacon.sh:ro
 
-    # Sensor Zeek en el puerto espejo 
+    # Sensor Zeek en el puerto espejo
     # (se inicia con config-lab.sh)
     zeek:
       image: zeek/zeek:latest
