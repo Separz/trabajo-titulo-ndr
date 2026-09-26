@@ -65,6 +65,7 @@ topology:
       binds:
         - logs/zeek:/zeek_logs:ro
         - logs/slips:/slips_output
+        - configs/slips/slips.yaml:/StratosphereLinuxIPS/config/ndr-slips.yaml:ro
       entrypoint: sleep
       cmd: infinity
 
