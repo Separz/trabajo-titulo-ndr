@@ -1,0 +1,21 @@
+# Ajustes del laboratorio sobre el despliegue single-node oficial de wazuh-docker
+# Se copia a wazuh-docker/single-node/ y Compose lo combina con docker-compose.yml
+# NDR_DIR debe apuntar a la raiz de este repo
+# Ej: export NDR_DIR=$HOME/TRABAJO-TITULO/NDR
+services:
+  wazuh.manager:
+    networks:
+      - default
+      - clab
+    volumes:
+      # Alertas de Slips que lee el manager
+      - ${NDR_DIR:?definir NDR_DIR con la ruta del repositorio}/logs/slips:/var/ossec/logs/slips:ro
+      # Lo que se monta en /wazuh-config-mount se copia a /var/ossec al iniciar el contenedor
+      - ${NDR_DIR}/configs/wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf
+      - ${NDR_DIR}/configs/wazuh/local_rules.xml:/wazuh-config-mount/etc/rules/local_rules.xml
+
+# Red de gestion que crea Containerlab
+networks:
+  clab:
+    external: true
+    name: clab-ndr-mgmt

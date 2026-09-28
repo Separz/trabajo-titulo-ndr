@@ -1,0 +1,8 @@
+<!-- Reglas propias del NDR. Rango reservado para reglas locales: 100000-120000 -->
+<group name="slips,ndr,">
+  <rule id="100200" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="Analyzer.Name">^Slips$</field>
+    <description>Slips: $(Description)</description>
+  </rule>
+</group>
