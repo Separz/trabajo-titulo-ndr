@@ -1,0 +1,65 @@
+<!-- Decodificador de las alertas de Slips (formato IDEA 2.D.V03) -->
+<!-- El prefijo "slips: " lo agrega el logcollector con out_format en ossec.conf -->
+<decoder name="slips">
+  <prematch>^slips: </prematch>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Source": \[\{"IP": "([^"]+)"</regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Target": \[\{"IP": "([^"]+)"</regex>
+  <order>dstip</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Priority": "(\w+)"</regex>
+  <order>slips.priority</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Confidence": ([\d.]+)</regex>
+  <order>slips.confidence</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Description": "([^"]+)"</regex>
+  <order>slips.description</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"ID": "([^"]+)"</regex>
+  <order>slips.id</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"StartTime": "([^"]+)"</regex>
+  <order>slips.start_time</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Method": \["(\w+)"\]</regex>
+  <order>slips.method</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">\\"timewindow\\": (\d+)</regex>
+  <order>slips.timewindow</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">\\"uids\\": \[\\"([^\\"]+)\\"</regex>
+  <order>slips.uid</order>
+</decoder>
