@@ -157,4 +157,4 @@ docker exec clab-ndr-lab-fw nft delete element inet ndr blocklist '{ 10.10.10.12
 - **Las imágenes de Zeek y Slips usan `latest`.** Falta fijar versiones para que los experimentos sean reproducibles.
 - **RITA y MISP** aún no forman parte del laboratorio.
 
-El detalle de cada hallazgo y de las decisiones de diseño está en `docs/notas-laboratorio.md`.
+Las especificaciones de diseño están en `docs/diseno/` y los diagramas, con sus fuentes, en `docs/diagramas/`.

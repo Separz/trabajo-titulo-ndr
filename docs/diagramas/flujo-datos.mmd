@@ -1,0 +1,68 @@
+%% Diagrama de flujo de datos (DFD), nivel 1, notación Yourdon/DeMarco
+%%   rectángulo = entidad externa
+%%   círculo = proceso
+%%   cilindro = almacén de datos.
+%% Los elementos con borde discontinuo son complementarios
+flowchart TB
+    %% Entidades externas
+    E1["E1 · Segmento de red<br/>(switch SPAN)"]:::ext
+    E2["E2 · Analista de seguridad"]:::ext
+    E3["E3 · Host gestionado<br/>(agente Wazuh)"]:::ext
+    E4["E4 · Firewall perimetral"]:::ext
+    E5["E5 · Feeds de amenazas"]:::extc
+
+    %% Procesos
+    P1(("1.0<br/>Capturar y extraer<br/>metadatos<br/>(Zeek)")):::proc
+    P2(("2.0<br/>Analizar<br/>comportamiento<br/>(Slips)")):::proc
+    P3(("3.0<br/>Detectar<br/>beaconing<br/>(RITA)")):::procc
+    P4(("4.0<br/>Normalizar y<br/>correlacionar<br/>(Wazuh)")):::proc
+    P5(("5.0<br/>Enriquecer<br/>con IoC<br/>(MISP)")):::procc
+    P6(("6.0<br/>Decidir<br/>respuesta<br/>(matriz TD05)")):::proc
+    P7(("7.0<br/>Ejecutar y<br/>revertir<br/>respuesta")):::proc
+
+    %% Almacenes de datos
+    D1[("D1 · Logs de Zeek<br/>(JSON)")]:::store
+    D2[("D2 · Perfiles y evidencias<br/>(Redis/SQLite)")]:::store
+    D3[("D3 · Alertas de Slips<br/>(alerts.json, IDMEFv2)")]:::store
+    D4[("D4 · Datos de RITA<br/>(ClickHouse)")]:::storec
+    D5[("D5 · Alertas indexadas<br/>(Wazuh indexer)")]:::store
+    D6[("D6 · Indicadores<br/>de compromiso (MISP)")]:::storec
+    D7[("D7 · Registro auditable<br/>(active-responses.log)")]:::store
+
+    E1 -- "tráfico espejado" --> P1
+    P1 -- "conexiones, HTTP, DNS, TLS" --> D1
+
+    D1 -- "flujos" --> P2
+    P2 <-- "perfil por host y ventana" --> D2
+    P2 -- "alerta: origen, destino,<br/>confianza, uids" --> D3
+
+    D1 -- "flujos (lotes)" --> P3
+    P3 <-- "conexiones agregadas" --> D4
+    P3 -- "puntaje de beaconing" --> P4
+
+    D3 -- "evidencias y alertas IDMEFv2" --> P4
+    P4 -- "alerta normalizada<br/>con severidad" --> D5
+    P4 -- "IP / dominio sospechoso" --> P5
+    E5 -- "IoC" --> D6
+    D6 -- "atributos coincidentes" --> P5
+    P5 -- "contexto de amenaza" --> P4
+
+    P4 -- "alerta, severidad,<br/>entidades (amenaza/activo)" --> P6
+    P6 -- "registros para revisión manual" --> E2
+    E2 -- "aprobación / orden<br/>de reversión" --> P6
+    P6 -- "acción: mecanismo,<br/>objetivo, timeout" --> P7
+
+    P7 -- "aislar / restaurar" --> E3
+    P7 -- "agregar / eliminar IP<br/>en blocklist" --> E4
+    E3 -- "resultado" --> P7
+    E4 -- "resultado" --> P7
+    P7 -- "detonante, mecanismo,<br/>marca de tiempo" --> D7
+    D5 -- "alertas y panel" --> E2
+    D7 -- "consulta de auditoría" --> E2
+
+    classDef ext fill:#eef2f7,stroke:#334155,stroke-width:1.5px,color:#0f172a
+    classDef extc fill:#eef2f7,stroke:#334155,stroke-width:1.5px,stroke-dasharray:5 4,color:#0f172a
+    classDef proc fill:#e0f2fe,stroke:#0369a1,stroke-width:1.5px,color:#0c4a6e
+    classDef procc fill:#e0f2fe,stroke:#0369a1,stroke-width:1.5px,stroke-dasharray:5 4,color:#0c4a6e
+    classDef store fill:#fef9c3,stroke:#a16207,stroke-width:1.5px,color:#422006
+    classDef storec fill:#fef9c3,stroke:#a16207,stroke-width:1.5px,stroke-dasharray:5 4,color:#422006

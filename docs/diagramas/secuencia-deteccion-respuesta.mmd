@@ -1,0 +1,72 @@
+%% Diagrama de secuencia
+%% detección y respuesta ante un canal de mando y control (beaconing)
+%% Cubre: RF01–RF11, métricas de OE2 (latencia de detección) y OE3 (tiempo de contención)
+%%  t0 = primer paquete malicioso en la captura
+%%  t1 = alerta en Wazuh
+%%  t2 = contención confirmada
+%%  Latencia de detección = t1 - t0 (RNF13, ≤ 5 min)
+%%  Tiempo de contención = t2 - t1 (OE3, ≤ 60 s).
+
+sequenceDiagram
+    autonumber
+    participant H as Host LAN<br/>(gestionado o no)
+    participant SW as Switch<br/>(puerto SPAN)
+    participant Z as Zeek
+    participant S as Slips
+    participant R as RITA<br/>(complementario)
+    participant W as Wazuh manager
+    participant M as MISP<br/>(complementario)
+    participant A as Analista
+    participant AG as Agente Wazuh<br/>(host gestionado)
+    participant FW as Firewall perimetral
+
+    Note over H,SW: t0: inicia el tráfico hacia el C2
+    loop Cada ~30 s (beacon)
+        H->>SW: HTTP GET al C2 (IP interna, antes del NAT, S2)
+        SW-->>Z: copia espejada (SPAN, capa 2)
+    end
+
+    Z->>Z: reconstruye conexiones y protocolos (RF02)
+    Z-)S: conn.log / http.log / dns.log en JSON<br/>(volumen compartido)
+    Z-)R: mismos logs (importación por lotes)
+
+    par Análisis de comportamiento
+        S->>S: perfil por host y ventana temporal,<br/>evidencias y nivel de amenaza acumulado (RF04)
+        S-)W: evidencias y alertas IDMEFv2 en alerts.json<br/>(Status, Source, Target, uids)
+    and Análisis de beaconing
+        R->>R: puntaje de periodicidad por par origen–destino (RF03)
+        R-)W: resultado exportado en JSON/syslog (TD04)
+    end
+
+    W->>W: logcollector lee el archivo, el decodificador<br/>extrae campos y la regla asigna severidad (RF05)
+    Note over W: t1: alerta correlacionada en Wazuh
+
+    opt Enriquecimiento (RF08)
+        W->>M: Integrator: consulta de IoC (IP / dominio del destino)
+        M-->>W: atributos coincidentes (categoría, tipo, evento)
+        W->>W: alerta enriquecida
+    end
+
+    alt Evidencia, o alerta sobre equipo excluido (RF11)
+        W-)A: alerta en el dashboard para revisión manual
+        A->>W: decide la acción o la descarta
+    else Alerta de Slips y host con agente (RF06)
+        W->>AG: Active Response: aislamiento del host (stateful, con timeout)
+        AG-->>W: resultado de ejecución
+    else Alerta de Slips y host sin agente (RF07)
+        W->>FW: Active Response: agregar IP a la blocklist con timeout
+        FW-->>W: regla aplicada
+    end
+    Note over W,FW: t2: contención confirmada
+
+    W->>W: registro auditable: detonante, mecanismo,<br/>marca de tiempo (RF09, active-responses.log)
+
+    alt Reversión automática (RF10)
+        FW->>FW: expira el timeout del elemento en la blocklist
+        AG->>AG: expira el timeout y se restaura la conectividad
+    else Reversión manual (RF10)
+        A->>W: solicita revertir (falso positivo)
+        W->>FW: eliminar IP de la blocklist
+        W->>AG: comando de reversión (delete)
+    end
+    W->>W: registro auditable de la reversión (RF09)

@@ -1,0 +1,67 @@
+%% Diagrama de contenedores (modelo C4, nivel 2) del sistema NDR en notacion C4
+%% Cada contenedor es una unidad desplegable ejecutable en el cluster Kubernetes
+%% Borde discontinuo = componente complementario
+flowchart TB
+    analista["<b>Analista de seguridad</b><br/><i>[Persona]</i><br/>Revisa alertas, aprueba acciones<br/>y revierte bloqueos"]:::person
+
+    subgraph red["Segmento del Departamento de Informática"]
+        direction LR
+        hosts["<b>Hosts del segmento</b><br/><i>[Sistema externo]</i><br/>Gestionados (con agente) y no<br/>gestionados (Wi-Fi, BYOD, IoT)"]:::ext
+        switch["<b>Switch del segmento</b><br/><i>[Sistema externo]</i><br/>Puerto SPAN que replica<br/>el tráfico (S1)"]:::ext
+        fw["<b>Firewall perimetral</b><br/><i>[Sistema externo]</i><br/>Enrutamiento, NAT y<br/>blocklist con timeout (RF07)"]:::extc
+        agente["<b>Agente Wazuh</b><br/><i>[Contenedor: servicio en el host]</i><br/>Aislamiento y reversión en<br/>equipos gestionados (RF06, RF10)"]:::ext
+    end
+
+    subgraph ndr["Sistema NDR  ·  clúster Kubernetes"]
+        subgraph sensor["Captura y detección"]
+            direction LR
+            zeek["<b>Zeek</b><br/><i>[Contenedor: C++, hostNetwork, NET_RAW]</i><br/>Captura pasiva y logs de<br/>conexión y protocolo (RF01, RF02)"]:::cont
+            zeeklogs[("<b>Logs de Zeek</b><br/><i>[Volumen persistente: JSON]</i><br/>conn, http, dns, ssl<br/>retención ≥ 30 días (RNF05)")]:::db
+            slips["<b>Slips</b><br/><i>[Contenedor: Python]</i><br/>Perfilado por host y ML,<br/>evidencias y alertas IDMEFv2<br/>(RF04, RNF09)"]:::cont
+            redis[("<b>Redis / SQLite</b><br/><i>[Almacén de Slips]</i><br/>Perfiles, ventanas y<br/>evidencias (RNF02)")]:::db
+            rita["<b>RITA</b><br/><i>[Contenedor: Go]</i><br/>Análisis estadístico de<br/>beaconing/C2 (RF03)"]:::contc
+            ch[("<b>ClickHouse</b><br/><i>[BD columnar]</i><br/>Conexiones importadas<br/>por RITA")]:::dbc
+        end
+
+        subgraph siem["Correlación y respuesta"]
+            direction LR
+            manager["<b>Wazuh manager</b><br/><i>[Contenedor: C / Python]</i><br/>Decodificador propio, reglas, Integrator<br/>y Active Response (RF05–RF11)"]:::cont
+            indexer[("<b>Wazuh indexer</b><br/><i>[OpenSearch]</i><br/>Alertas y registro<br/>auditable (RF09)")]:::db
+            dashboard["<b>Wazuh dashboard</b><br/><i>[Contenedor: web]</i><br/>Visualización y gestión<br/>de alertas"]:::cont
+            misp["<b>MISP</b><br/><i>[Contenedor: PHP / MySQL]</i><br/>Indicadores de compromiso<br/>para enriquecimiento (RF08)"]:::contc
+        end
+    end
+
+    feeds["<b>Feeds de amenazas</b><br/><i>[Sistema externo]</i><br/>Comunidades MISP y OSINT"]:::extc
+
+    hosts -- "tráfico de red" --> switch
+    switch -- "copia espejada<br/><i>[Ethernet, capa 2]</i>" --> zeek
+    zeek -- "escribe<br/><i>[JSON]</i>" --> zeeklogs
+    zeeklogs -- "lee en modo creciente<br/><i>[archivo]</i>" --> slips
+    slips <--> redis
+    zeeklogs -. "importa por lotes<br/><i>[archivo]</i>" .-> rita
+    rita <-.-> ch
+
+    slips -- "alerts.json<br/><i>[IDMEFv2 JSON, logcollector]</i>" --> manager
+    rita -. "resultados<br/><i>[JSON / syslog]</i>" .-> manager
+    manager -. "consulta IoC<br/><i>[HTTPS, REST]</i>" .-> misp
+    feeds -. "sincroniza<br/><i>[HTTPS]</i>" .-> misp
+    manager -- "indexa alertas<br/><i>[Filebeat, HTTPS]</i>" --> indexer
+    dashboard -- "consulta<br/><i>[HTTPS]</i>" --> indexer
+    analista -- "usa<br/><i>[HTTPS]</i>" --> dashboard
+
+    manager -- "Active Response<br/><i>[1514/TCP, cifrado]</i>" --> agente
+    agente -- "aísla / restaura" --> hosts
+    manager -. "bloqueo con timeout<br/><i>[agente o API, TT03]</i>" .-> fw
+
+    classDef person fill:#08427b,stroke:#052e56,color:#ffffff
+    classDef cont fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef contc fill:#1168bd,stroke:#0b4884,color:#ffffff,stroke-width:2px,stroke-dasharray:6 4
+    classDef db fill:#438dd5,stroke:#2e6295,color:#ffffff
+    classDef dbc fill:#438dd5,stroke:#2e6295,color:#ffffff,stroke-width:2px,stroke-dasharray:6 4
+    classDef ext fill:#8c8c8c,stroke:#6b6b6b,color:#ffffff
+    classDef extc fill:#8c8c8c,stroke:#6b6b6b,color:#ffffff,stroke-width:2px,stroke-dasharray:6 4
+    style ndr fill:transparent,stroke:#444,stroke-dasharray:4 3
+    style red fill:transparent,stroke:#999,stroke-dasharray:4 3
+    style sensor fill:transparent,stroke:#bbb
+    style siem fill:transparent,stroke:#bbb
