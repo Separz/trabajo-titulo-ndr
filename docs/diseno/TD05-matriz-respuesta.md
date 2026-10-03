@@ -15,8 +15,8 @@ Requisitos relacionados: RF06, RF07, RF09, RF10, RF11. Depende de TD04 (campos `
 
 | Entrada | De dónde sale | Valores |
 |---|---|---|
-| Severidad | Regla de Wazuh que dispara (TD04) | Nivel 3 a 13 |
-| Entidad amenaza | `srcip` | IP |
+| Tipo de registro | Regla de Wazuh que dispara (TD04) | Evidencia (niveles 3 a 10) o alerta de Slips (nivel 12) |
+| Entidad amenaza | `srcip` (atacante según Slips) | IP |
 | Entidad afectada | `dstip` | IP |
 | Ubicación de la amenaza | `srcip` comparada con los rangos internos | Interna o externa |
 | Tipo de equipo | ¿Existe un agente Wazuh registrado con esa IP? | Gestionado o no gestionado |
@@ -35,7 +35,7 @@ Equipos sobre los que nunca se actúa de forma automática, aunque la alerta cum
 
 En Wazuh se implementa con la lista blanca global de la respuesta activa (`white_list`).
 
-La lista no es opcional. En el laboratorio, una de las alertas que alcanzó el nivel de respuesta tenía como entidad amenaza a `10.10.10.1`, la puerta de enlace: sin exclusión, el sistema habría cortado la salida de todo el segmento.
+La lista no es opcional. En el laboratorio, Slips generó una evidencia de amenaza alta que señalaba como atacante a `10.10.10.1`, la puerta de enlace. Si esa evidencia formara parte de una alerta, sin exclusión el sistema cortaría la salida de todo el segmento.
 
 ## 3. Mecanismos
 
@@ -56,21 +56,21 @@ En el laboratorio, M1 corresponde al conjunto `blocklist` de nftables en el nodo
 
 ## 4. Matriz
 
-Aplica a alertas de Slips. Los resultados de RITA siempre van a M0 (ver TD04, sección 6).
+Aplica a registros de Slips. Los resultados de RITA siempre van a M0 (ver TD04, sección 6).
 
-| # | Severidad | Entidad amenaza | Tipo de equipo | Acción | Mecanismo | Reversión |
+| # | Registro | Entidad amenaza | Tipo de equipo | Acción | Mecanismo | Reversión |
 |---|---|---|---|---|---|---|
-| 1 | Nivel menor que 10 | Cualquiera | Cualquiera | Ninguna; se registra | — | — |
-| 2 | Nivel 10 a 12 | Cualquiera | Cualquiera | Revisión por el analista | M0 | — |
-| 3 | Nivel 13 | En lista de exclusión | Cualquiera | Revisión por el analista, marcada como prioritaria | M0 | — |
-| 4 | Nivel 13 | Externa | — | Bloquear la IP externa | M1 | Automática al expirar; manual a pedido |
-| 5 | Nivel 13 | Interna | Gestionado | Aislar el equipo y bloquear su IP en el perímetro | M2 + M1 | Automática al expirar; manual a pedido |
-| 6 | Nivel 13 | Interna | No gestionado | Bloquear su IP en el perímetro | M1 | Automática al expirar; manual a pedido |
-| 7 | Nivel 13 | Interna, y la entidad afectada también es interna | No gestionado | Bloquear en el perímetro y escalar al analista | M1 + M0 | Automática al expirar; manual a pedido |
+| 1 | Evidencia de nivel menor que 10 | Cualquiera | Cualquiera | Ninguna; se registra | — | — |
+| 2 | Evidencia crítica (nivel 10) | Cualquiera | Cualquiera | Revisión por el analista | M0 | — |
+| 3 | Alerta de Slips | En lista de exclusión | Cualquiera | Revisión por el analista, marcada como prioritaria | M0 | — |
+| 4 | Alerta de Slips | Externa | — | Bloquear la IP externa | M1 | Automática al expirar; manual a pedido |
+| 5 | Alerta de Slips | Interna | Gestionado | Aislar el equipo y bloquear su IP en el perímetro | M2 + M1 | Automática al expirar; manual a pedido |
+| 6 | Alerta de Slips | Interna | No gestionado | Bloquear su IP en el perímetro | M1 | Automática al expirar; manual a pedido |
+| 7 | Alerta de Slips | Interna, y la víctima también es interna | No gestionado | Bloquear en el perímetro y escalar al analista | M1 + M0 | Automática al expirar; manual a pedido |
 
 La fila 7 existe porque M1 no detiene tráfico lateral: si la amenaza y la víctima están en el mismo segmento y el equipo no tiene agente, el bloqueo perimetral solo corta su salida. El analista debe actuar por otra vía, por ejemplo deshabilitando el puerto del switch.
 
-El nivel 13 equivale a severidad alta o crítica con confianza de Slips mayor o igual a 0,8 (regla 100210 de TD04).
+Una alerta de Slips es una decisión sobre un host en una ventana de tiempo, tomada al acumular evidencia de varios módulos. Ninguna evidencia aislada dispara una acción automática (TD04, sección 4).
 
 ## 5. Reversión
 
@@ -81,7 +81,7 @@ El nivel 13 equivale a severidad alta o crítica con confianza de Slips mayor o 
 
 Tiempo de expiración provisional: 10 minutos en el laboratorio. El valor para producción se acuerda con el área responsable de la red.
 
-La reversión manual de M1 ya está probada a mano en el laboratorio (ver README, "Prueba manual de bloqueo con reversión"). La de M2 queda para la implementación.
+El firewall del laboratorio ya implementa la lista de bloqueo con expiración en la que se apoya M1. La prueba con tráfico del bloqueo y de su reversión, y la implementación de M2, quedan para los ensayos de respuesta.
 
 ## 6. Registro auditable
 
@@ -98,16 +98,17 @@ La alerta de origen y la acción quedan enlazadas por la IP y por el identificad
 
 La matriz define el comportamiento objetivo. Con los resultados actuales del laboratorio, la respuesta automática **no debe habilitarse todavía**:
 
-- Las 25 alertas que alcanzaron el nivel 13 son falsos positivos (TD04, sección 5).
+- Slips no ha emitido ninguna alerta: aún no se puede verificar que sus alertas correspondan a amenazas reales.
 - Slips no clasifica el beacon simulado como canal de mando y control.
+- Slips deduce mal la red local del laboratorio y genera evidencia de amenaza alta sobre tráfico legítimo.
 
 Antes de activar las filas 4 a 7 deben cumplirse tres condiciones:
 
-1. Slips calibrado, con la red local declarada correctamente y una tasa de falsos positivos medida sobre tráfico benigno.
-2. Umbral de confianza revisado con los resultados de esa calibración.
+1. Slips calibrado, con la red local declarada correctamente y su umbral de alerta ajustado con una tasa de falsos positivos medida sobre tráfico benigno.
+2. Al menos una alerta real de Slips procesada de extremo a extremo, para confirmar su estructura.
 3. Lista de exclusión cargada y probada.
 
-Mientras tanto, todas las alertas de nivel 10 o superior se tratan con la fila 2.
+Mientras tanto, las alertas de Slips se tratan con la fila 3: revisión manual.
 
 En producción se agrega una cuarta condición: la autorización del área responsable de la red para cada mecanismo.
 
@@ -116,7 +117,8 @@ En producción se agrega una cuarta condición: la autorización del área respo
 | Decisión | Alternativa descartada | Razón |
 |---|---|---|
 | Wazuh como único punto de decisión | Bloqueo nativo de Slips | El sensor es pasivo y se perdería el umbral y el registro centralizados |
-| Lista explícita de rangos internos | Deducir la dirección por puertos o por el orden de los campos | El orden de `Source` y `Target` en IDEA no indica dirección |
+| Lista explícita de rangos internos | Deducir la dirección por puertos o por el orden de los campos | El orden de `Source` y `Target` en los registros de Slips no indica dirección |
+| Responder solo a alertas de Slips | Responder a evidencias con umbral de confianza | Slips agrega evidencia de varios módulos antes de decidir; responder a evidencias aisladas habría bloqueado tráfico legítimo 25 veces en el laboratorio |
 | Lista de exclusión obligatoria | Confiar solo en el umbral | Un falso positivo sobre la puerta de enlace cortaría todo el segmento |
 | M2 mediante script en el manager y la API | Respuesta activa dirigida al agente de origen | Las alertas del NDR se originan en el manager, no en el agente afectado |
 | Dos variantes de M1 para producción | Fijar una | Depende de si el firewall institucional admite un agente o solo expone una API |

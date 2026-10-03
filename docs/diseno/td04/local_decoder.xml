@@ -1,4 +1,4 @@
-<!-- Decodificador de las alertas de Slips (formato IDEA 2.D.V03) -->
+<!-- Decodificador de las alertas de Slips (formato IDMEFv2, version 2.D.V03) -->
 <!-- El prefijo "slips: " lo agrega el logcollector con out_format en ossec.conf -->
 <decoder name="slips">
   <prematch>^slips: </prematch>
@@ -14,6 +14,12 @@
   <parent>slips</parent>
   <regex type="pcre2">"Target": \[\{"IP": "([^"]+)"</regex>
   <order>dstip</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Status": "(\w+)"</regex>
+  <order>slips.status</order>
 </decoder>
 
 <decoder name="slips_campos">

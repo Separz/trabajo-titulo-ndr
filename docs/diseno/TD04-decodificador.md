@@ -4,9 +4,16 @@ Define cómo las detecciones de Slips y de RITA se convierten en eventos de Wazu
 
 Requisitos relacionados: RF05, RF11, RNF09. Insumo para TD05 y para la implementación TT05a, TT05b y TT10.
 
+Referencia principal: García, S. et al. (2026). *Slips: Behavioral Evidence Aggregation for Network Security*. arXiv:2608.11979.
+
 ## 1. Entrada: alerta de Slips
 
-Slips 1.1.23 escribe una alerta por línea en `alerts.json`, en formato IDEA (versión `2.D.V03`). Ejemplo real del laboratorio:
+Slips 1.1.23 escribe un registro por línea en `alerts.json`, en formato IDMEFv2 (versión `2.D.V03`). Hay dos tipos de registro, que se distinguen por el campo `Status` (García et al., 2026):
+
+- **`Event`: evidencia.** La interpretación que hace un módulo de detección de una o más conexiones. Una evidencia aislada no es una decisión.
+- **`Incident`: alerta.** Slips suma la evidencia de cada host dentro de una ventana de tiempo, ponderando nivel de amenaza por confianza; cuando la suma supera el umbral configurado, emite una alerta sobre ese host.
+
+Ejemplo real de evidencia del laboratorio:
 
 ```json
 {"Version": "2.D.V03",
@@ -27,6 +34,7 @@ Slips 1.1.23 escribe una alerta por línea en `alerts.json`, en formato IDEA (ve
 | Campo | Tipo | Significado |
 |---|---|---|
 | `Analyzer.Name` | texto | Siempre `Slips`; identifica la fuente |
+| `Status` | texto | `Event` (evidencia) o `Incident` (alerta) |
 | `Analyzer.Method` | lista | `Heuristic` o `AI` según el módulo que generó la alerta |
 | `ID` | UUID | Identificador único de la alerta |
 | `Priority` | texto | Nivel de amenaza: `Info`, `Low`, `Medium`, `High`, `Critical` |
@@ -34,15 +42,17 @@ Slips 1.1.23 escribe una alerta por línea en `alerts.json`, en formato IDEA (ve
 | `StartTime` | fecha ISO 8601 | Momento del tráfico que originó la alerta |
 | `CreateTime` | fecha ISO 8601 | Momento en que Slips emitió la alerta |
 | `Description` | texto | Descripción legible, incluye el módulo o patrón detectado |
-| `Source[0].IP` | IP | Entidad que Slips considera la amenaza (semántica IDEA) |
-| `Target[0].IP` | IP | Entidad afectada |
+| `Source[0].IP` | IP | Entidad que Slips considera atacante |
+| `Target[0].IP` | IP | Entidad que Slips considera víctima |
 | `Note` | JSON serializado como texto | Incluye `uids` (identificadores de la conexión en Zeek), `timewindow` y `threat_level` |
 
-Tres observaciones sobre las 503 alertas reunidas en el laboratorio (corridas del 24-09, 25-09 y 02-10):
+Cuatro observaciones sobre los 542 registros reunidos en el laboratorio (corridas del 24-09, 25-09 y 02-10):
+
+- Los 542 son evidencias (`Event`). Slips no emitió ninguna alerta: la evidencia acumulada nunca superó su umbral.
 
 - `Priority` coincide siempre con el `threat_level` del campo `Note`, por lo que basta leer `Priority`.
 - `Source` y `Target` traen siempre un solo elemento.
-- En IDEA, `Source` no es el origen técnico del flujo sino la entidad maliciosa. En una alerta de conexión sospechosa hacia el exterior, `Source` puede ser la IP externa y `Target` el equipo interno. Los puertos sí siguen el orden técnico de la conexión, de modo que no deben usarse para deducir la dirección.
+- `Source` no es el origen técnico del flujo sino el atacante según Slips. En una evidencia de conexión sospechosa hacia el exterior, `Source` puede ser la IP externa y `Target` el equipo interno. Los puertos sí siguen el orden técnico de la conexión, de modo que no deben usarse para deducir la dirección.
 
 ## 2. Por qué no basta el decodificador JSON nativo
 
@@ -71,8 +81,9 @@ Para que las alertas lleguen al decodificador propio y no al JSON genérico, el 
 
 | Campo en Wazuh | Origen en la alerta | Uso |
 |---|---|---|
-| `srcip` | `Source[0].IP` | Entidad amenaza; campo que lee la respuesta activa |
-| `dstip` | `Target[0].IP` | Entidad afectada |
+| `srcip` | `Source[0].IP` | Atacante; campo que lee la respuesta activa |
+| `slips.status` | `Status` | Distingue evidencia de alerta |
+| `dstip` | `Target[0].IP` | Víctima |
 | `slips.priority` | `Priority` | Entrada del mapeo de severidad |
 | `slips.confidence` | `Confidence` | Entrada del umbral de respuesta |
 | `slips.description` | `Description` | Texto de la alerta; conserva el módulo y el patrón detectado |
@@ -90,33 +101,45 @@ La definición completa está en [td04/local_decoder.xml](td04/local_decoder.xml
 
 ## 4. Mapeo de severidad
 
-Wazuh usa niveles de 0 a 15. El mapeo parte del nivel de amenaza de Slips y agrega un nivel reservado para las alertas que cumplen el umbral de respuesta.
+Wazuh usa niveles de 0 a 15. Las evidencias se registran con un nivel según su amenaza, para que el analista las vea en contexto. Solo las alertas de Slips quedan como candidatas a respuesta.
 
 | Regla | Condición | Nivel Wazuh | Efecto |
 |---|---|---|---|
-| 100200 | Cualquier alerta de Slips (`Info`) | 3 | Se registra |
-| 100201 | `Priority` = `Low` | 5 | Se registra |
-| 100202 | `Priority` = `Medium` | 7 | Visible en el panel |
-| 100203 | `Priority` = `High` | 10 | Revisión manual |
-| 100204 | `Priority` = `Critical` | 12 | Revisión manual |
-| 100210 | `High` o `Critical`, y `Confidence` ≥ 0,8 | 13 | Candidata a respuesta automática (grupo `ndr_respuesta`) |
+| 100200 | Cualquier registro de Slips (evidencia `Info`) | 3 | Se registra |
+| 100201 | Evidencia `Low` | 5 | Se registra |
+| 100202 | Evidencia `Medium` | 7 | Visible en el panel |
+| 100203 | Evidencia `High` | 9 | Visible en el panel |
+| 100204 | Evidencia `Critical` | 10 | Revisión manual |
+| 100210 | Alerta de Slips (`Status` = `Incident`) | 12 | Candidata a respuesta automática (grupo `ndr_respuesta`) |
 
-El umbral de 0,8 es provisional. La regla 100210 es el único punto donde se define, de modo que calibrarlo implica cambiar una sola expresión.
+El umbral de confianza que exige el sistema antes de responder se implementa en dos capas:
+
+1. **En Slips**, que solo emite una alerta cuando la evidencia acumulada del host supera su umbral. Ese umbral es el parámetro que se calibra.
+2. **En la matriz de TD05**, que decide qué hacer con cada alerta según el equipo involucrado.
 
 La respuesta automática se asocia al grupo `ndr_respuesta` y no a un nivel, para que subir o bajar niveles no active bloqueos por accidente.
 
 La definición completa está en [td04/local_rules.xml](td04/local_rules.xml).
 
+### Por qué no responder a evidencias
+
+Una primera versión de este diseño disparaba la respuesta ante cualquier evidencia de amenaza alta con confianza mayor o igual a 0,8. Al probarla con los datos del laboratorio, 25 evidencias cumplían esa condición y las 25 eran falsos positivos: 24 por el direccionamiento de la primera corrida y una por la red local que Slips deduce mal (en esta última, el atacante señalado era la puerta de enlace).
+
+El diseño de Slips explica el resultado: ningún módulo decide por sí solo, y una evidencia es un insumo, no una decisión (García et al., 2026). Responder a evidencias aisladas habría anulado precisamente el mecanismo que Slips usa para evitar falsos positivos.
+
 ## 5. Validación
 
-El decodificador y las reglas se probaron con `wazuh-logtest` en un contenedor `wazuh-manager` 4.14.7 aislado, usando las 503 alertas reunidas:
+El decodificador y las reglas se probaron con `wazuh-logtest` en un contenedor `wazuh-manager` 4.14.7 aislado, usando los 542 registros reunidos:
 
 | Resultado | Cantidad |
 |---|---|
-| Alertas decodificadas con `srcip` | 503 de 503 |
-| Regla 100200 (nivel 3) | 376 |
-| Regla 100201 (nivel 5) | 102 |
-| Regla 100210 (nivel 13) | 25 |
+| Registros decodificados con `srcip` | 542 de 542 |
+| Regla 100200 (nivel 3) | 405 |
+| Regla 100201 (nivel 5) | 112 |
+| Regla 100203 (nivel 9) | 25 |
+| Regla 100210 (respuesta) | 0 |
+
+Como el laboratorio no ha producido alertas de Slips, la regla 100210 se probó con un registro sintético: una evidencia real a la que se cambió `Status` a `Incident`. La regla disparó con nivel 12, grupo `ndr_respuesta` y `srcip` extraído.
 
 Tres alertas de muestra, una por tipo, están en [td04/muestras.json](td04/muestras.json). Para repetir la prueba:
 
@@ -124,13 +147,12 @@ Tres alertas de muestra, una por tipo, están en [td04/muestras.json](td04/muest
 sed 's/^/slips: /' docs/diseno/td04/muestras.json | docker exec -i <manager> /var/ossec/bin/wazuh-logtest
 ```
 
-**Hallazgo.** Las 25 alertas que alcanzan el nivel 13 son falsos positivos conocidos del laboratorio: 24 por el direccionamiento de la primera corrida (ya corregido) y 1 por la red local que Slips deduce mal. Con el umbral actual, todas habrían disparado un bloqueo. Esto confirma que `Priority` y `Confidence` de una alerta aislada no bastan como criterio de respuesta, y condiciona el diseño de TD05: lista de exclusión obligatoria y calibración de Slips antes de habilitar la respuesta automática.
-
 Lo que **no** está validado todavía:
 
+- la estructura de una alerta real de Slips (`Incident`), que puede traer campos distintos a los de una evidencia;
 - el paso por el recolector con `out_format` (solo se probó con el probador de reglas);
-- alertas con IPv6 en `Source` o `Target`;
-- alertas de nivel `Medium` y `Critical`, que no aparecieron en el laboratorio.
+- registros con IPv6 en `Source` o `Target`;
+- evidencias de nivel `Medium` y `Critical`, que no aparecieron en el laboratorio.
 
 ## 6. RITA
 
@@ -165,6 +187,7 @@ Los nombres exactos de las columnas de RITA y los umbrales de puntaje deben veri
 |---|---|---|
 | Decodificador propio con expresiones regulares | Decodificador JSON nativo | El nativo no entrega la IP de `Source` como campo |
 | Prefijo `slips: ` con `out_format` | Distinguir por contenido del JSON | El decodificador JSON genérico captura cualquier línea que empiece con `{` |
-| `srcip` = entidad amenaza de IDEA | `srcip` = origen técnico del flujo | Es la entidad que corresponde bloquear y coincide con lo que espera la respuesta activa |
+| `srcip` = atacante según Slips | `srcip` = origen técnico del flujo | Es la entidad que corresponde bloquear y coincide con lo que espera la respuesta activa |
+| Respuesta solo ante alertas de Slips | Respuesta ante evidencias con umbral de confianza | Las 25 evidencias que cumplían ese umbral eran falsos positivos; Slips ya agrega la evidencia antes de decidir |
 | Respuesta asociada a un grupo de reglas | Respuesta asociada a un nivel | Evita activar bloqueos al ajustar niveles |
 | Script intermedio para RITA | Leer la salida de RITA directamente | RITA no emite alertas en línea |
