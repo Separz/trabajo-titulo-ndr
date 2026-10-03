@@ -1,0 +1,131 @@
+# Slips y el agente Wazuh que envia sus alertas al manager
+# No usa hostNetwork ni capacidades: solo lee los logs que escribe Zeek
+# Corre en el nodo de captura porque comparte con Zeek un volumen local
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slips
+  namespace: ndr
+  labels:
+    app: slips
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: slips
+  template:
+    metadata:
+      labels:
+        app: slips
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: ndr/captura
+                    operator: In
+                    values: ["true"]
+      containers:
+        - name: slips
+          # Version fijada por digest (Slips 1.1.23)
+          image: stratosphereips/slips@sha256:c739b717e5aec6eef3a88a860e926df8960f12f21a4d45a86f3c9e7e70de4ca5
+          workingDir: /StratosphereLinuxIPS
+          command: ["bash", "-c"]
+          args:
+            - |
+              # Esperar a que Zeek cree su carpeta de trabajo
+              until [ -e /zeek_logs/current ]; do sleep 5; done
+              # Slips no acepta un enlace simbolico como directorio: se pasa la ruta resuelta
+              exec ./slips.py -c config/ndr-slips.yaml \
+                -g "$(readlink -f /zeek_logs/current)" -i eth0 -o /slips_output/live
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          volumeMounts:
+            - name: zeek-logs
+              mountPath: /zeek_logs
+              readOnly: true
+            - name: slips-output
+              mountPath: /slips_output
+            - name: slips-config
+              mountPath: /StratosphereLinuxIPS/config/ndr-slips.yaml
+              subPath: slips.yaml
+              readOnly: true
+
+        # Agente Wazuh: lee alerts.json y lo envia al manager por el canal cifrado del agente
+        - name: wazuh-agent
+          image: wazuh/wazuh-agent:4.14.7
+          env:
+            - name: WAZUH_MANAGER_SERVER
+              value: "CAMBIAR_SERVICIO_WAZUH_MANAGER"
+            - name: WAZUH_AGENT_NAME
+              value: "ndr-sensor"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: slips-output
+              mountPath: /var/ossec/logs/slips
+              readOnly: true
+            - name: agent-config
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              subPath: ossec.conf
+              readOnly: true
+      volumes:
+        - name: zeek-logs
+          persistentVolumeClaim:
+            claimName: zeek-logs
+        - name: slips-output
+          persistentVolumeClaim:
+            claimName: slips-output
+        # Se crea desde configs/slips/slips.yaml (ver docs/diseno/TD06-despliegue-kubernetes.md)
+        - name: slips-config
+          configMap:
+            name: slips-config
+        - name: agent-config
+          configMap:
+            name: ndr-agent-config
+---
+# Configuracion del agente Wazuh del sensor
+# El prefijo "slips: " dirige las alertas al decodificador propio
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ndr-agent-config
+  namespace: ndr
+data:
+  ossec.conf: |
+    <ossec_config>
+      <client>
+        <server>
+          <address>CAMBIAR_SERVICIO_WAZUH_MANAGER</address>
+          <port>1514</port>
+          <protocol>tcp</protocol>
+        </server>
+        <enrollment>
+          <enabled>yes</enabled>
+          <agent_name>ndr-sensor</agent_name>
+        </enrollment>
+      </client>
+      <localfile>
+        <log_format>json</log_format>
+        <location>/var/ossec/logs/slips/live/alerts/alerts.json</location>
+        <out_format>slips: $(log)</out_format>
+      </localfile>
+    </ossec_config>

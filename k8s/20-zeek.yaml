@@ -1,0 +1,77 @@
+# Sensor Zeek: captura pasiva sobre la interfaz conectada al puerto SPAN
+# Usa la red del nodo (hostNetwork) porque el trafico espejado llega a una interfaz fisica
+# Corre solo en el nodo etiquetado con ndr/captura=true
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeek
+  namespace: ndr
+  labels:
+    app: zeek
+spec:
+  replicas: 1
+  # Recreate evita dos Zeek escribiendo a la vez en el mismo volumen
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: zeek
+  template:
+    metadata:
+      labels:
+        app: zeek
+    spec:
+      automountServiceAccountToken: false
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: ndr/captura
+                    operator: In
+                    values: ["true"]
+      containers:
+        - name: zeek
+          # Version fijada por digest (Zeek 9.0.0)
+          image: zeek/zeek@sha256:70733f4e540ba1608e37e00c6a93d009f79734262c9ec2ba09d90aa9abc16de5
+          command: ["bash", "/scripts/start.sh"]
+          env:
+            # Interfaz fisica conectada al puerto SPAN del switch
+            - name: IFACE
+              value: "CAMBIAR_INTERFAZ_SPAN"
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # NET_RAW para abrir el socket de captura
+              # NET_ADMIN para poner la interfaz en modo promiscuo
+              add: ["NET_RAW", "NET_ADMIN"]
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "kill -0 \"$(cat /run/zeek.pid)\""]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: zeek-logs
+        # Se crea desde configs/zeek/start.sh (ver docs/diseno/TD06-despliegue-kubernetes.md)
+        - name: scripts
+          configMap:
+            name: zeek-scripts

@@ -1,0 +1,33 @@
+# Restringe la red de Slips: sin entradas y con salida solo a DNS y al manager de Wazuh
+# Impide que los modulos de inteligencia externa envien direcciones de la red a terceros
+# No aplica a Zeek: una NetworkPolicy no afecta a pods con hostNetwork
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: slips-salida-restringida
+  namespace: ndr
+spec:
+  podSelector:
+    matchLabels:
+      app: slips
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    # Resolucion de nombres dentro del cluster
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Agente Wazuh hacia el manager: eventos (1514) y registro (1515)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: CAMBIAR_NAMESPACE_WAZUH
+      ports:
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515

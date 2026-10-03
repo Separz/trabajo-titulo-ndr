@@ -1,0 +1,65 @@
+%% TD06 - Diagrama de despliegue del NDR en el cluster Kubernetes
+%% Nodo = caja exterior
+%% Pod = caja interior
+%% Contenedor = rectangulo
+%% Volumen = cilindro
+%% Borde discontinuo = existente o fuera del alcance de los manifiestos
+flowchart LR
+    sw["<b>Switch del segmento</b><br/><i>puerto SPAN (S1)</i>"]:::ext
+
+    subgraph cluster["Clúster Kubernetes del Departamento"]
+        subgraph nodo["«nodo» Nodo de captura · etiqueta ndr/captura=true"]
+            nic["<b>NIC de captura</b><br/><i>sin IP, modo promiscuo</i>"]:::hw
+
+            subgraph nsndr["«namespace» ndr"]
+                subgraph pzeek["«pod» zeek · hostNetwork"]
+                    czeek["<b>zeek</b><br/>Zeek 9.0.0<br/><i>NET_RAW, NET_ADMIN</i>"]:::cont
+                end
+
+                subgraph pslips["«pod» slips · red de pods"]
+                    cslips["<b>slips</b><br/>Slips 1.1.23<br/><i>sin capacidades</i>"]:::cont
+                    cagent["<b>wazuh-agent</b><br/>4.14.7<br/><i>agente ndr-sensor</i>"]:::cont
+                end
+
+                cron["«cronjob» retencion-zeek<br/><i>borra logs &gt; 30 días</i>"]:::cont
+                np["«networkpolicy»<br/>slips-salida-restringida<br/><i>solo DNS y manager</i>"]:::pol
+            end
+
+            pvz[("<b>zeek-logs</b><br/>PV local · 100 Gi<br/>/var/lib/ndr/zeek")]:::vol
+            pvs[("<b>slips-output</b><br/>PV local · 20 Gi<br/>/var/lib/ndr/slips")]:::vol
+        end
+
+        subgraph nswazuh["«namespace» Wazuh (existente)"]
+            manager["<b>wazuh-manager</b><br/><i>decodificador y reglas del NDR</i>"]:::prev
+            indexer[("<b>wazuh-indexer</b>")]:::prev
+            dashboard["<b>wazuh-dashboard</b>"]:::prev
+        end
+    end
+
+    analista["<b>Analista</b>"]:::ext
+
+    sw -. "tráfico espejado<br/>[Ethernet, capa 2]" .-> nic
+    nic --> czeek
+    czeek -- "escribe logs JSON" --> pvz
+    pvz -- "solo lectura" --> cslips
+    cslips -- "alerts.json" --> pvs
+    pvs -- "solo lectura" --> cagent
+    cagent -- "eventos<br/>[1514/TCP, cifrado]" --> manager
+    cron -. "limpia" .-> pvz
+    np -. "aplica a" .-> pslips
+    manager --> indexer
+    dashboard --> indexer
+    analista -- "HTTPS" --> dashboard
+
+    classDef cont fill:#1168bd,stroke:#0b4884,color:#ffffff
+    classDef prev fill:#8c8c8c,stroke:#6b6b6b,color:#ffffff,stroke-dasharray:6 4
+    classDef ext fill:#eef2f7,stroke:#334155,color:#0f172a
+    classDef hw fill:#e2e8f0,stroke:#334155,color:#0f172a
+    classDef vol fill:#fef9c3,stroke:#a16207,color:#422006
+    classDef pol fill:#fce7f3,stroke:#be185d,color:#500724
+    style cluster fill:transparent,stroke:#475569
+    style nodo fill:transparent,stroke:#334155,stroke-width:2px
+    style nsndr fill:transparent,stroke:#1d4ed8,stroke-dasharray:5 4
+    style nswazuh fill:transparent,stroke:#6b6b6b,stroke-dasharray:5 4
+    style pzeek fill:transparent,stroke:#0b4884
+    style pslips fill:transparent,stroke:#0b4884

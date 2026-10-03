@@ -1,0 +1,78 @@
+# Almacenamiento persistente en el disco local del nodo de captura
+# Zeek y Slips corren en ese mismo nodo, por eso basta un volumen local
+# Los tamanos son provisionales y se ajustan con el volumen de trafico real
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ndr-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+# Logs de Zeek
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ndr-zeek-logs
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes: [ReadWriteOnce]
+  storageClassName: ndr-local
+  persistentVolumeReclaimPolicy: Retain
+  local:
+    path: /var/lib/ndr/zeek
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: ndr/captura
+              operator: In
+              values: ["true"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zeek-logs
+  namespace: ndr
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ndr-local
+  volumeName: ndr-zeek-logs
+  resources:
+    requests:
+      storage: 100Gi
+---
+# Salida de Slips: alertas, base SQLite y volcado de Redis
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ndr-slips-output
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes: [ReadWriteOnce]
+  storageClassName: ndr-local
+  persistentVolumeReclaimPolicy: Retain
+  local:
+    path: /var/lib/ndr/slips
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: ndr/captura
+              operator: In
+              values: ["true"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: slips-output
+  namespace: ndr
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ndr-local
+  volumeName: ndr-slips-output
+  resources:
+    requests:
+      storage: 20Gi

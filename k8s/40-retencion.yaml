@@ -1,0 +1,38 @@
+# Borra cada noche los logs de Zeek con mas de 30 dias
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: retencion-zeek
+  namespace: ndr
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: ndr/captura
+                        operator: In
+                        values: ["true"]
+          containers:
+            - name: limpiar
+              image: alpine:3.20
+              command: ["sh", "-c", "find /logs -type f -name '*.log*' -mtime +30 -delete"]
+              resources:
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              volumeMounts:
+                - name: logs
+                  mountPath: /logs
+          volumes:
+            - name: logs
+              persistentVolumeClaim:
+                claimName: zeek-logs

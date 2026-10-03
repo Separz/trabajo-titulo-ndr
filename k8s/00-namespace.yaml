@@ -1,0 +1,8 @@
+# Espacio de nombres propio del NDR
+# El nivel "privileged" es necesario porque el sensor usa hostNetwork y capacidades de red
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ndr
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
