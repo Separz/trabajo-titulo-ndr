@@ -1,8 +1,49 @@
-<!-- Reglas propias del NDR. Rango reservado para reglas locales: 100000-120000 -->
+<!--Reglas propias del NDR. Rango reservado para reglas locales: 100000-120000
+    Este archivo contiene las reglas para decodificar mensajes de
+    Slips segun Prioridad y Status, pasando de IDMEFv2 al formato de Wazuh -->
 <group name="slips,ndr,">
   <rule id="100200" level="3">
     <decoded_as>json</decoded_as>
     <field name="Analyzer.Name">^Slips$</field>
     <description>Slips: $(Description)</description>
+  </rule>
+
+    <!--Evidencia low-->
+    <rule id="100201" level="5">
+    <if_sid>100200</if_sid>
+    <field name="Priority">^Low$</field>
+    <description>Slips (evidencia baja): $(Description)</description>
+
+    </rule>
+
+  <!--Evidencia medium-->
+  <rule id="100202" level="7">
+    <if_sid>100200</if_sid>
+    <field name="Priority">^Medium$</field>
+    <description>Slips (evidencia media): $(Description)</description>
+  </rule>
+
+  <!--Evidencia high-->
+  <rule id="100203" level="9">
+    <if_sid>100200</if_sid>
+    <field name="Priority">^High$</field>
+    <description>Slips (evidencia alta): $(Description)</description>
+
+  </rule>
+
+  <!--Evidencia critical-->
+  <rule id="100204" level="10">
+    <if_sid>100200</if_sid>
+    <field name="Priority">^Critical$</field>
+    <description>Slips (evidencia crítica): $(Description)</description>
+
+  </rule>
+
+  <!--Alerta slips Incident-->
+  <rule id="100210" level="12">
+    <if_sid>100200</if_sid>
+    <match>"Status":"Incident"</match>
+    <description>Slips: alerta sobre un equipo</description>
+    <group>ndr_respuesta,</group>
   </rule>
 </group>
