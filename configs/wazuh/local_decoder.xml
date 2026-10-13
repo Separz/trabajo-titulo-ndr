@@ -1,0 +1,30 @@
+<!--Decodificador de los registros de Slips (IDMEFv2)-->
+<!--El prefijo "slips: " lo agrega el logcolletor con out_format en ossec.conf-->
+<decoder name="slips">
+  <prematch>^slips: </prematch>
+</decoder>
+
+<!--Decodificador de los campos de Slips (IDMEFv2)-->
+<decoder name="slips_campos">
+  <!--solo evalua si el padre reconoce la linea-->
+  <parent>slips</parent>
+  <!--hasta donde llega el prefijo-->
+  <prematch>^slips: </prematch>
+  <!--despues del prefijo, se aplica el decodificador JSON-->
+  <plugin_decoder offset="after_prematch">JSON_Decoder</plugin_decoder>
+</decoder>
+
+<!--Decodificador para el campo de IP de origen-->
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Source":\s*\[\{"IP":\s*"([^"]+)"</regex>
+  <order>srcip</order>
+</decoder>
+
+<!--Decodificador para el campo de IP de destino-->
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Target":\s*\[\{"IP":\s*"([^"]+)"</regex>
+  <order>dstip</order>
+</decoder>
+

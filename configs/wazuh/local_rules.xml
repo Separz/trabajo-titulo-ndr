@@ -1,9 +1,9 @@
 <!--Reglas propias del NDR. Rango reservado para reglas locales: 100000-120000
-    Este archivo contiene las reglas para decodificar mensajes de
+    Este archivo contiene las reglas para clasificar los mensajes de
     Slips segun Prioridad y Status, pasando de IDMEFv2 al formato de Wazuh -->
 <group name="slips,ndr,">
   <rule id="100200" level="3">
-    <decoded_as>json</decoded_as>
+    <decoded_as>slips</decoded_as>
     <field name="Analyzer.Name">^Slips$</field>
     <description>Slips: $(Description)</description>
   </rule>
@@ -43,7 +43,7 @@
   <rule id="100210" level="12">
     <if_sid>100200</if_sid>
     <match>"Status":"Incident"</match>
-    <description>Slips: alerta sobre un equipo</description>
+    <description>Slips: alerta sobre el equipo $(srcip)</description>
     <group>ndr_respuesta,</group>
   </rule>
 </group>

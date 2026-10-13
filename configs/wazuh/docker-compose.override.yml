@@ -13,6 +13,7 @@ services:
       # Lo que se monta en /wazuh-config-mount se copia a /var/ossec al iniciar el contenedor
       - ${NDR_DIR}/configs/wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf
       - ${NDR_DIR}/configs/wazuh/local_rules.xml:/wazuh-config-mount/etc/rules/local_rules.xml
+      - ${NDR_DIR}/configs/wazuh/local_decoder.xml:/wazuh-config-mount/etc/decoders/local_decoder.xml
 
 # Red de gestion que crea Containerlab
 networks:
