@@ -33,8 +33,10 @@ flowchart LR
 | inet | `ghcr.io/hellt/network-multitool` | Destino externo / servidor C2 |
 | pc1 | `ghcr.io/hellt/network-multitool` | Equipo gestionado |
 | pc2 | `ghcr.io/hellt/network-multitool` | Equipo no gestionado con beaconing |
-| zeek | `zeek/zeek:latest` | Captura pasiva y generación de logs |
-| slips | `stratosphereips/slips:latest` | Análisis de comportamiento |
+| zeek | `zeek/zeek` 9.0.0 | Captura pasiva y generación de logs |
+| slips | `stratosphereips/slips` 1.1.23 | Análisis de comportamiento |
+
+Zeek, Slips y `network-multitool` se referencian por digest en `ndr-lab.clab.yml`, para que cada corrida use exactamente la misma imagen. Son los mismos digest de Zeek y Slips que usan los manifiestos de `k8s/`.
 
 Hay dos planos separados. El plano de datos (10.10.10.0/24 y 100.64.0.0/24) es lo único que ve Zeek. El plano de gestión (`clab-ndr-mgmt`, 172.30.30.0/24) lo crea Containerlab y en él se conecta Wazuh.
 
@@ -154,7 +156,6 @@ docker exec clab-ndr-lab-fw nft delete element inet ndr blocklist '{ 10.10.10.12
 - **Slips deduce mal la red local.** Con `-i eth0` toma la red de gestión (172.30.30.0/24) como red local y marca con severidad alta tráfico legítimo dentro del segmento 10.10.10.0/24.
 - **Slips no clasifica el beacon como C2** con la configuración por defecto. El modelo `ml_linear_model` sí marca esos flujos, pero con nivel bajo.
 - **El SPAN de Open vSwitch no pierde paquetes bajo carga**, a diferencia de un puerto SPAN físico. Las mediciones del laboratorio no son comparables con producción en ese aspecto.
-- **Las imágenes de Zeek y Slips usan `latest`.** Falta fijar versiones para que los experimentos sean reproducibles.
 - **RITA y MISP** aún no forman parte del laboratorio.
 
 Las especificaciones de diseño están en `docs/diseno/` y los diagramas, con sus fuentes, en `docs/diagramas/`.
