@@ -17,12 +17,14 @@ Requisitos relacionados: RF06, RF07, RF09, RF10, RF11. Depende de TD04 (campos `
 |---|---|---|
 | Tipo de registro | Regla de Wazuh que dispara (TD04) | Evidencia (niveles 3 a 10) o alerta de Slips (nivel 12) |
 | Entidad amenaza | `srcip` (atacante según Slips) | IP |
-| Entidad afectada | `dstip` | IP |
+| Entidad afectada | `dstip`, presente solo en las evidencias | IP |
 | Ubicación de la amenaza | `srcip` comparada con los rangos internos | Interna o externa |
 | Tipo de equipo | ¿Existe un agente Wazuh registrado con esa IP? | Gestionado o no gestionado |
 | Exclusión | `srcip` comparada con la lista de exclusión | Excluida o no |
 
 Los rangos internos se declaran en una lista explícita: en el laboratorio, `10.10.10.0/24`; en producción, los rangos del segmento departamental. No se deduce la dirección del tráfico a partir de los puertos.
+
+Una alerta de Slips no trae la entidad afectada: su registro solo incluye el host sobre el que Slips decide (`srcip`) y la lista `CorrelID` con los identificadores de las evidencias que la originaron (TD04, sección 1). La víctima está en esas evidencias, que sí traen `dstip`. La decisión que depende de la víctima (fila 7 de la matriz) no puede tomarse con la alerta sola; el mecanismo para obtenerla a partir de las evidencias del mismo `srcip` está pendiente de diseño.
 
 ### Lista de exclusión
 
@@ -70,6 +72,8 @@ Aplica a registros de Slips. Los resultados de RITA siempre van a M0 (ver TD04, 
 
 La fila 7 existe porque M1 no detiene tráfico lateral: si la amenaza y la víctima están en el mismo segmento y el equipo no tiene agente, el bloqueo perimetral solo corta su salida. El analista debe actuar por otra vía, por ejemplo deshabilitando el puerto del switch.
 
+Es el caso que se observó en el laboratorio: las alertas del 09-10 y del 13-10 fueron sobre `pc2` (`10.10.10.12`, no gestionado) mientras escaneaba los puertos de `pc1` (`10.10.10.11`), en el mismo segmento. Mientras no exista el mecanismo para conocer la víctima (sección 2), las filas 6 y 7 no se pueden distinguir de forma automática, y toda alerta sobre un equipo interno no gestionado debe escalarse al analista como en la fila 7.
+
 Una alerta de Slips es una decisión sobre un host en una ventana de tiempo, tomada al acumular evidencia de varios módulos. Ninguna evidencia aislada dispara una acción automática (TD04, sección 4).
 
 ## 5. Reversión
@@ -85,7 +89,7 @@ El firewall del laboratorio ya implementa la lista de bloqueo con expiración en
 
 ## 6. Registro auditable
 
-Cada acción y cada reversión deja un registro con tres datos: el detonante (regla y alerta que la originó, con su `slips.id`), el mecanismo usado y la marca de tiempo.
+Cada acción y cada reversión deja un registro con tres datos: el detonante (regla y alerta que la originó, con su campo `ID`), el mecanismo usado y la marca de tiempo.
 
 | Fuente | Contenido |
 |---|---|
@@ -98,19 +102,23 @@ La alerta de origen y la acción quedan enlazadas por la IP y por el identificad
 
 La matriz define el comportamiento objetivo. Con los resultados actuales del laboratorio, la respuesta automática **no debe habilitarse todavía**:
 
-- Slips no ha emitido ninguna alerta: aún no se puede verificar que sus alertas correspondan a amenazas reales.
-- Slips no clasifica el beacon simulado como canal de mando y control.
-- Slips deduce mal la red local del laboratorio y genera evidencia de amenaza alta sobre tráfico legítimo.
+- Slips solo ha emitido alertas ante un escaneo de puertos: 801 el 09-10 y 441 el 13-10, todas sobre `pc2`, el equipo que escaneaba. Corresponden a una amenaza real, pero es el único tipo de ataque probado y no se ha medido cuántas alertas emite sobre tráfico benigno.
+- Slips repite la alerta sobre un mismo equipo: las 441 del 13-10 se emitieron en menos de ocho minutos y dentro de la misma ventana de tiempo. Sin agrupar, cada una dispararía la respuesta.
+- Slips no clasifica el beacon simulado como canal de mando y control. En la corrida del 13-10 con solo el beacon produjo 233 evidencias y ninguna alerta.
+- Slips deduce mal la red local del laboratorio y genera evidencia de amenaza alta sobre tráfico legítimo. El 13-10, 2.000 evidencias de nivel alto señalaron como atacante a `pc1`, el equipo escaneado. Ninguna alerta fue sobre `pc1`.
 
-Antes de activar las filas 4 a 7 deben cumplirse tres condiciones:
+Antes de activar las filas 4 a 7 deben cumplirse cuatro condiciones:
 
-1. Slips calibrado, con la red local declarada correctamente y su umbral de alerta ajustado con una tasa de falsos positivos medida sobre tráfico benigno.
-2. Al menos una alerta real de Slips procesada de extremo a extremo, para confirmar su estructura.
-3. Lista de exclusión cargada y probada.
+| # | Condición | Estado |
+|---|---|---|
+| 1 | Slips calibrado, con la red local declarada correctamente y su umbral de alerta ajustado con una tasa de falsos positivos medida sobre tráfico benigno | Pendiente |
+| 2 | Al menos una alerta real de Slips procesada de extremo a extremo, para confirmar su estructura | Cumplida el 13-10: las 441 alertas llegaron a Wazuh con `srcip`, nivel 12 y grupo `ndr_respuesta` (TD04, sección 5) |
+| 3 | Lista de exclusión cargada y probada | Pendiente |
+| 4 | Alertas repetidas sobre un mismo equipo agrupadas, de modo que la respuesta se dispare una vez por equipo y no una vez por alerta | Pendiente |
 
 Mientras tanto, las alertas de Slips se tratan con la fila 3: revisión manual.
 
-En producción se agrega una cuarta condición: la autorización del área responsable de la red para cada mecanismo.
+En producción se agrega una quinta condición: la autorización del área responsable de la red para cada mecanismo.
 
 ## 8. Decisiones
 
