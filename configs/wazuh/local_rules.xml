@@ -42,7 +42,7 @@
   <!--Alerta slips Incident-->
   <rule id="100210" level="12">
     <if_sid>100200</if_sid>
-    <match>"Status":"Incident"</match>
+    <match type="pcre2">"Status":\s*"Incident"</match>
     <description>Slips: alerta sobre el equipo $(srcip)</description>
     <group>ndr_respuesta,</group>
   </rule>
