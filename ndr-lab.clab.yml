@@ -34,24 +34,25 @@ topology:
     # 'Internet'
     # servidor C2 simulado (nginx)
     inet:
-      image: ghcr.io/hellt/network-multitool
+      image: ghcr.io/hellt/network-multitool@sha256:a8d96c19e593e227d7b16d320a04256ba00434028f0adb9f7da206bf098c7140
 
     # Equipo gestionado
     # (futuro agente Wazuh)
     pc1:
-      image: ghcr.io/hellt/network-multitool
+      image: ghcr.io/hellt/network-multitool@sha256:a8d96c19e593e227d7b16d320a04256ba00434028f0adb9f7da206bf098c7140
 
     # Equipo no gestionado que emite beaconing hacia el C2
     # (BYOD / Wi-Fi)
     pc2:
-      image: ghcr.io/hellt/network-multitool
+      image: ghcr.io/hellt/network-multitool@sha256:a8d96c19e593e227d7b16d320a04256ba00434028f0adb9f7da206bf098c7140
       binds:
         - configs/pc2/beacon.sh:/beacon.sh:ro
 
     # Sensor Zeek en el puerto espejo
     # (se inicia con config-lab.sh)
     zeek:
-      image: zeek/zeek:latest
+      # Version fijada por digest (Zeek 9.0.0)
+      image: zeek/zeek@sha256:70733f4e540ba1608e37e00c6a93d009f79734262c9ec2ba09d90aa9abc16de5
       binds:
         - configs/zeek/start.sh:/start.sh:ro
         - logs/zeek:/logs
@@ -61,7 +62,8 @@ topology:
     # Slips lee los logs de Zeek desde el volumen compartido
     # (arranque manual)
     slips:
-      image: stratosphereips/slips:latest
+      # Version fijada por digest (Slips 1.1.23)
+      image: stratosphereips/slips@sha256:c739b717e5aec6eef3a88a860e926df8960f12f21a4d45a86f3c9e7e70de4ca5
       binds:
         - logs/zeek:/zeek_logs:ro
         - logs/slips:/slips_output
