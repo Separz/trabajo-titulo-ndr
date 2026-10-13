@@ -31,12 +31,11 @@
 
   </rule>
 
-  <!--Evidencia critical-->
+  <!--Evidencia critical. Slips la escribe con Priority High, el nivel real queda en Note-->
   <rule id="100204" level="10">
-    <if_sid>100200</if_sid>
-    <field name="Priority">^Critical$</field>
+    <if_sid>100203</if_sid>
+    <field name="Note" type="pcre2">"threat_level":\s*"critical"</field>
     <description>Slips (evidencia crítica): $(Description)</description>
-
   </rule>
 
   <!--Alerta slips Incident-->
