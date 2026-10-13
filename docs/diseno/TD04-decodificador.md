@@ -4,7 +4,7 @@ Define cómo las detecciones de Slips y de RITA se convierten en eventos de Wazu
 
 Requisitos relacionados: RF05, RF11, RNF09. Insumo para TD05 y para la implementación TT05a, TT05b y TT10.
 
-Referencia principal: García, S. et al. (2026). *Slips: Behavioral Evidence Aggregation for Network Security*. arXiv:2608.11979.
+Referencia principal: García, S. et al. (2026). *Slips: Behavioral Evidence Aggregation for Network Security*. arXiv:2608.11979. El resto de las fuentes está en la sección 8.
 
 ## 1. Entrada: alerta de Slips
 
@@ -13,7 +13,11 @@ Slips 1.1.23 escribe un registro por línea en `alerts.json`, en formato IDMEFv2
 - **`Event`: evidencia.** La interpretación que hace un módulo de detección de una o más conexiones. Una evidencia aislada no es una decisión.
 - **`Incident`: alerta.** Slips suma la evidencia de cada host dentro de una ventana de tiempo, ponderando nivel de amenaza por confianza; cuando la suma supera el umbral configurado, emite una alerta sobre ese host.
 
-Ejemplo real de evidencia del laboratorio:
+El borrador IDMEFv2 define `Incident` como un evento que «is considered as an incident and should be taken care of» (sección 5.2, tabla 3).
+
+### Evidencia
+
+Ejemplo real del laboratorio:
 
 ```json
 {"Version": "2.D.V03",
@@ -35,39 +39,75 @@ Ejemplo real de evidencia del laboratorio:
 |---|---|---|
 | `Analyzer.Name` | texto | Siempre `Slips`; identifica la fuente |
 | `Status` | texto | `Event` (evidencia) o `Incident` (alerta) |
-| `Analyzer.Method` | lista | `Heuristic` o `AI` según el módulo que generó la alerta |
-| `ID` | UUID | Identificador único de la alerta |
-| `Priority` | texto | Nivel de amenaza: `Info`, `Low`, `Medium`, `High`, `Critical` |
+| `Analyzer.Method` | lista | `Heuristic` o `AI` según el módulo que generó la evidencia |
+| `ID` | UUID | Identificador único del registro |
+| `Priority` | texto | Nivel de amenaza: `Info`, `Low`, `Medium` o `High` (ver la nota sobre el nivel crítico) |
 | `Confidence` | número 0–1 | Confianza de Slips en la detección |
-| `StartTime` | fecha ISO 8601 | Momento del tráfico que originó la alerta |
-| `CreateTime` | fecha ISO 8601 | Momento en que Slips emitió la alerta |
+| `StartTime` | fecha ISO 8601 | Momento del tráfico que originó la evidencia |
+| `CreateTime` | fecha ISO 8601 | Momento en que Slips emitió el registro |
 | `Description` | texto | Descripción legible, incluye el módulo o patrón detectado |
 | `Source[0].IP` | IP | Entidad que Slips considera atacante |
 | `Target[0].IP` | IP | Entidad que Slips considera víctima |
 | `Note` | JSON serializado como texto | Incluye `uids` (identificadores de la conexión en Zeek), `timewindow` y `threat_level` |
 
-Cuatro observaciones sobre los 542 registros reunidos en el laboratorio (corridas del 24-09, 25-09 y 02-10):
+### Alerta
 
-- Los 542 son evidencias (`Event`). Slips no emitió ninguna alerta: la evidencia acumulada nunca superó su umbral.
+Una alerta trae menos campos que una evidencia. Ejemplo real de la corrida del 13-10, con la lista `CorrelID` abreviada (el registro original trae 34 identificadores):
 
-- `Priority` coincide siempre con el `threat_level` del campo `Note`, por lo que basta leer `Priority`.
+```json
+{"Version": "2.D.V03",
+ "Analyzer": {"IP": "0.0.0.0", "Name": "Slips", "Model": "1.1.23",
+              "Category": ["NIDS"], "Data": ["Flow", "Network"], "Method": ["Heuristic"]},
+ "Source": [{"IP": "10.10.10.12"}],
+ "ID": "3b781b2b-44bf-47ff-b949-7a0f19723aa8",
+ "Status": "Incident",
+ "StartTime": "2026-10-13T06:01:07.514338+00:00",
+ "CreateTime": "2026-10-13T06:58:31.487742+00:00",
+ "CorrelID": ["f4f57c35-a955-4741-9880-e54bedfebe20", "b65dfe25-e1ad-4fd6-92f5-49ffeba656d9"],
+ "Note": "{\"accumulated_threat_level\": 3.0200000000000005, \"accumulated_ratl\": 5.194400000000001, \"risk_level\": \"high\", \"timewindow\": 2, \"EndTime\": \"2026-10-13T07:01:07.514338+00:00\"}"}
+```
+
+- `Source[0].IP` es el host sobre el que Slips decide.
+- `CorrelID` lista los `ID` de las evidencias que originaron la alerta.
+- `StartTime` y el `EndTime` de `Note` delimitan la ventana de tiempo.
+- No trae `Priority`, `Confidence`, `Description` ni `Target`.
+
+Esta estructura coincide con el código que la genera (`slips_files/common/idmefv2.py`, líneas 146-177) y con las 1.242 alertas observadas en el laboratorio (801 el 09-10 y 441 el 13-10).
+
+### Observaciones
+
+Sobre los 542 registros de las primeras corridas (24-09, 25-09 y 02-10):
+
+- Los 542 son evidencias. En esas corridas Slips no emitió ninguna alerta; las primeras aparecieron el 09-10, con un escaneo de puertos desde `pc2`.
 - `Source` y `Target` traen siempre un solo elemento.
 - `Source` no es el origen técnico del flujo sino el atacante según Slips. En una evidencia de conexión sospechosa hacia el exterior, `Source` puede ser la IP externa y `Target` el equipo interno. Los puertos sí siguen el orden técnico de la conexión, de modo que no deben usarse para deducir la dirección.
 
+Sobre el código de Slips 1.1.23:
+
+- **`Priority` nunca vale `Critical`.** IDMEFv2 solo define `Unknown`, `Info`, `Low`, `Medium` y `High` (borrador, sección 5.2, tabla 4), y Slips convierte su nivel crítico a `High` al escribir el registro (`idmefv2.py`, líneas 80-93). El nivel original se conserva en `threat_level`, dentro de `Note` (`slips_files/core/evidence_handler_worker.py`, línea 143). En los demás niveles, `Priority` y `threat_level` coinciden.
+- **`Source` y `Target` no siempre contienen una IP.** Según el tipo de entidad pueden traer `Hostname` o `URL` (`idmefv2.py`, líneas 111-116). En todas las evidencias del laboratorio fueron IP.
+- **`Target` es opcional en una evidencia** (`idmefv2.py`, línea 262). En el laboratorio apareció en todas.
+- **Slips escribe el JSON con espacios** después de `:` y `,` (`slips_files/core/evidence_logger.py`, línea 98). Importa para la sección 3.
+
 ## 2. Por qué no basta el decodificador JSON nativo
 
-La integración actual del laboratorio usa el decodificador JSON que trae Wazuh. Funciona para generar la alerta, pero tiene dos limitaciones comprobadas con `wazuh-logtest`:
+La primera integración del laboratorio usaba el decodificador JSON que trae Wazuh. Funcionaba para generar la alerta, pero tenía dos limitaciones comprobadas con `wazuh-logtest`:
 
-- `Source` y `Target` son listas de objetos, y el decodificador las entrega como un texto único (`[{'IP': '10.10.10.1', 'Port': [8]}]`). La IP no queda como campo consultable.
-- `Note` es un JSON dentro de un texto, así que `uids` y `timewindow` tampoco quedan disponibles.
+- `Source` y `Target` son listas de objetos, y el decodificador las entrega como un texto único (`[{'IP': '10.10.10.1', 'Port': [8]}]`). La IP no queda como campo consultable. La documentación de Wazuh lo declara: «An array of objects is not supported» (*JSON decoder*).
+- `Note` es un JSON dentro de un texto, así que `uids`, `timewindow` y `threat_level` tampoco quedan como campos.
 
-La primera es bloqueante para la respuesta: la respuesta activa de Wazuh toma la IP a bloquear del campo `srcip` de la alerta. Sin un `srcip` propio no hay respuesta automática posible.
+La primera es bloqueante para la respuesta: los scripts de respuesta activa de Wazuh toman la IP a bloquear del campo `srcip` de la alerta (`src/active-response/active_responses.c`, función `get_srcip_from_json`). Sin un `srcip` propio no hay respuesta automática posible, y la alerta tampoco puede decir sobre qué equipo es.
 
 ## 3. Diseño del decodificador
 
-Se define un decodificador propio, `slips`, con decodificadores hijos que extraen cada campo con una expresión regular.
+Se define un decodificador propio, `slips`, que combina dos mecanismos:
 
-Para que las alertas lleguen al decodificador propio y no al JSON genérico, el recolector les antepone un prefijo. En `ossec.conf`:
+- el **plugin JSON de Wazuh**, que extrae todos los campos simples con su nombre original;
+- **dos expresiones regulares**, que extraen lo que el plugin no puede: la IP de `Source` y la de `Target`.
+
+Wazuh documenta esta combinación («the ability to combine plugin decoders with regular expressions», *JSON decoder*) y la usa en su propio ruleset para obtener `srcip` de un registro JSON (`ruleset/decoders/0010-active-response_decoders.xml`, decodificador `ar_log_json_child`).
+
+Para que los registros lleguen al decodificador propio y no al JSON genérico, el recolector les antepone un prefijo. En `ossec.conf`:
 
 ```xml
 <localfile>
@@ -77,27 +117,66 @@ Para que las alertas lleguen al decodificador propio y no al JSON genérico, el 
 </localfile>
 ```
 
+El decodificador tiene cuatro partes:
+
+```xml
+<decoder name="slips">
+  <prematch>^slips: </prematch>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <prematch>^slips: </prematch>
+  <plugin_decoder offset="after_prematch">JSON_Decoder</plugin_decoder>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Source":\s*\[\{"IP":\s*"([^"]+)"</regex>
+  <order>srcip</order>
+</decoder>
+
+<decoder name="slips_campos">
+  <parent>slips</parent>
+  <regex type="pcre2">"Target":\s*\[\{"IP":\s*"([^"]+)"</regex>
+  <order>dstip</order>
+</decoder>
+```
+
+- El padre reconoce las líneas por el prefijo.
+- El primer hijo repite el `prematch` y usa `offset="after_prematch"` para que el plugin empiece a leer el JSON después del prefijo. Con `offset="after_parent"` el plugin no extrajo ningún campo.
+- Los tres hijos comparten nombre para que Wazuh los aplique todos al mismo registro.
+- Las expresiones exigen que la primera clave de `Source` o `Target` sea `IP`. Si Slips informa un `Hostname` o una `URL`, no se crea `srcip` y no hay respuesta posible sobre ese registro.
+
+### Espacios en el JSON
+
+Las expresiones usan `:\s*` porque el texto que llega al decodificador no es el que escribe Slips. Slips escribe `"Source": [{"IP": "10.10.10.12"}]`, con espacios. El recolector de Wazuh, con `log_format json`, interpreta cada línea y la vuelve a escribir en forma compacta, sin espacios (`src/logcollector/read_json.c`, llamada a `cJSON_PrintUnformatted`). El probador `wazuh-logtest`, en cambio, recibe la línea tal como se le entrega.
+
+Una expresión escrita para una sola de las dos formas funciona en el probador y falla en producción, o al revés. Se comprobó en el manager: el campo `full_log` de las alertas empieza con `slips: {"Version":"2.D.V03","Analyzer":{`, sin espacios.
+
 ### Campos de salida
 
-| Campo en Wazuh | Origen en la alerta | Uso |
-|---|---|---|
-| `srcip` | `Source[0].IP` | Atacante; campo que lee la respuesta activa |
-| `slips.status` | `Status` | Distingue evidencia de alerta |
-| `dstip` | `Target[0].IP` | Víctima |
-| `slips.priority` | `Priority` | Entrada del mapeo de severidad |
-| `slips.confidence` | `Confidence` | Entrada del umbral de respuesta |
-| `slips.description` | `Description` | Texto de la alerta; conserva el módulo y el patrón detectado |
-| `slips.method` | `Analyzer.Method[0]` | Distingue heurística de modelo de aprendizaje |
-| `slips.id` | `ID` | Trazabilidad hacia la alerta original |
-| `slips.start_time` | `StartTime` | Marca de tiempo del tráfico; base para medir la latencia de detección |
-| `slips.uid` | `Note.uids[0]` | Identificador de la conexión en los logs de Zeek |
-| `slips.timewindow` | `Note.timewindow` | Ventana temporal del perfil de Slips |
+| Campo en Wazuh | Origen en el registro | Mecanismo | Uso |
+|---|---|---|---|
+| `srcip` | `Source[0].IP` | Expresión regular | Atacante; campo que lee la respuesta activa |
+| `dstip` | `Target[0].IP` | Expresión regular | Víctima; solo en evidencias |
+| `Status` | `Status` | Plugin JSON | Distingue evidencia de alerta |
+| `Priority` | `Priority` | Plugin JSON | Entrada del mapeo de severidad |
+| `Confidence` | `Confidence` | Plugin JSON | Confianza de la evidencia |
+| `Description` | `Description` | Plugin JSON | Texto de la alerta; conserva el módulo y el patrón detectado |
+| `Analyzer.Name`, `Analyzer.Method` | `Analyzer` | Plugin JSON | Identifica la fuente; distingue heurística de modelo de aprendizaje |
+| `ID` | `ID` | Plugin JSON | Trazabilidad hacia el registro original |
+| `StartTime`, `CreateTime` | Ídem | Plugin JSON | Base para medir la latencia de detección |
+| `CorrelID` | `CorrelID` | Plugin JSON | Evidencias que originaron una alerta |
+| `Note` | `Note` | Plugin JSON, como texto | Contiene `threat_level`, `uids` y `timewindow` |
 
-`slips.description`, `slips.method` y `slips.uid` conservan la evidencia que originó cada detección. Con `slips.uid` se llega a la línea exacta de `conn.log`.
+`srcip` y `dstip` son campos estáticos de Wazuh; el resto son campos dinámicos (*Decoders syntax*, opción `order`).
+
+`uids` y `timewindow` no quedan como campos propios: siguen dentro del texto de `Note`. Con `uids` se llega a la línea exacta de `conn.log` en Zeek. Si se necesitan como campos, basta agregar un decodificador hijo con una expresión regular por cada uno.
 
 Los puertos no se asignan a `srcport` ni `dstport`, por la inconsistencia descrita en la sección 1.
 
-La definición completa está en [td04/local_decoder.xml](td04/local_decoder.xml).
+La definición completa está en [td04/local_decoder.xml](td04/local_decoder.xml), que es copia de `configs/wazuh/local_decoder.xml`.
 
 ## 4. Mapeo de severidad
 
@@ -109,8 +188,13 @@ Wazuh usa niveles de 0 a 15. Las evidencias se registran con un nivel según su 
 | 100201 | Evidencia `Low` | 5 | Se registra |
 | 100202 | Evidencia `Medium` | 7 | Visible en el panel |
 | 100203 | Evidencia `High` | 9 | Visible en el panel |
-| 100204 | Evidencia `Critical` | 10 | Revisión manual |
+| 100204 | Evidencia `High` cuyo `threat_level` en `Note` es `critical` | 10 | Revisión manual |
 | 100210 | Alerta de Slips (`Status` = `Incident`) | 12 | Candidata a respuesta automática (grupo `ndr_respuesta`) |
+
+Dos reglas no usan la condición más directa:
+
+- **100204** depende de la 100203 y lee `Note`, porque una evidencia crítica llega con `Priority` = `High` (sección 1).
+- **100210** busca el texto `"Status":\s*"Incident"` en el registro en vez de consultar el campo `Status`. Wazuh no admite `<field name="Status">`: `status` es un nombre de campo estático reservado y la carga de reglas falla con «Field 'Status' is static». La expresión tolera el espacio por la razón descrita en la sección 3.
 
 El umbral de confianza que exige el sistema antes de responder se implementa en dos capas:
 
@@ -119,7 +203,7 @@ El umbral de confianza que exige el sistema antes de responder se implementa en 
 
 La respuesta automática se asocia al grupo `ndr_respuesta` y no a un nivel, para que subir o bajar niveles no active bloqueos por accidente.
 
-La definición completa está en [td04/local_rules.xml](td04/local_rules.xml).
+La definición completa está en [td04/local_rules.xml](td04/local_rules.xml), que es copia de `configs/wazuh/local_rules.xml`.
 
 ### Por qué no responder a evidencias
 
@@ -129,30 +213,52 @@ El diseño de Slips explica el resultado: ningún módulo decide por sí solo, y
 
 ## 5. Validación
 
-El decodificador y las reglas se probaron con `wazuh-logtest` en un contenedor `wazuh-manager` 4.14.7 aislado, usando los 542 registros reunidos:
+Versiones: `wazuh-manager` 4.14.7 y Slips 1.1.23.
 
-| Resultado | Cantidad |
-|---|---|
-| Registros decodificados con `srcip` | 542 de 542 |
-| Regla 100200 (nivel 3) | 405 |
-| Regla 100201 (nivel 5) | 112 |
-| Regla 100203 (nivel 9) | 25 |
-| Regla 100210 (respuesta) | 0 |
+### Con el probador de reglas
 
-Como el laboratorio no ha producido alertas de Slips, la regla 100210 se probó con un registro sintético: una evidencia real a la que se cambió `Status` a `Incident`. La regla disparó con nivel 12, grupo `ndr_respuesta` y `srcip` extraído.
+El decodificador y las reglas se probaron primero con `wazuh-logtest` en un contenedor `wazuh-manager` aislado, con registros reales del 09-10. Una alerta, una evidencia `Low` y una evidencia `High` dispararon las reglas 100210, 100201 y 100203, con `srcip` y `dstip` extraídos, tanto en la forma compacta del JSON como en la forma con espacios.
 
-Tres alertas de muestra, una por tipo, están en [td04/muestras.json](td04/muestras.json). Para repetir la prueba:
+Cuatro registros de muestra, tres evidencias y una alerta, están en [td04/muestras.json](td04/muestras.json). Para repetir la prueba:
 
 ```bash
 sed 's/^/slips: /' docs/diseno/td04/muestras.json | docker exec -i <manager> /var/ossec/bin/wazuh-logtest
 ```
 
-Lo que **no** está validado todavía:
+El resultado esperado es, en orden, las reglas 100201, 100203, 100200 y 100210.
 
-- la estructura de una alerta real de Slips (`Incident`), que puede traer campos distintos a los de una evidencia;
-- el paso por el recolector con `out_format` (solo se probó con el probador de reglas);
-- registros con IPv6 en `Source` o `Target`;
-- evidencias de nivel `Medium` y `Critical`, que no aparecieron en el laboratorio.
+### En vivo
+
+El 13-10 se validó el flujo completo en el manager del laboratorio: Slips escribe `alerts.json`, el recolector lo lee con `out_format` y el manager decodifica y clasifica. Hubo dos corridas de Slips. La primera, solo con el beacon de `pc2`, produjo 233 registros. La segunda, con un escaneo de puertos desde `pc2` hacia `pc1` (`nmap -sS -p 1-2000 10.10.10.11`), produjo 10.798.
+
+| Tipo de registro | Slips escribió | Wazuh recibió | Regla (nivel) |
+|---|---|---|---|
+| Evidencia `Info` | 2.452 | 2.452 | 100200 (3) |
+| Evidencia `Low` | 6.132 | 6.132 | 100201 (5) |
+| Evidencia `Medium` | 1 | 1 | 100202 (7) |
+| Evidencia `High` | 2.005 | 2.005 | 100203 (9) |
+| Alerta | 441 | 441 | 100210 (12) |
+| **Total** | **11.031** | **11.031** | |
+
+- Las 11.031 alertas de Wazuh traen `srcip`.
+- 10.590 traen `dstip`: todas las evidencias. Las 441 alertas de Slips no lo traen porque no tienen `Target`.
+- Las 441 alertas de Slips son sobre `10.10.10.12`. En Wazuh quedaron con nivel 12, grupo `ndr_respuesta` y la descripción «Slips: alerta sobre el equipo 10.10.10.12».
+- No hubo errores ni advertencias del recolector en el log del manager.
+
+La columna de Slips suma las dos corridas. El desglose de la segunda sale del archivo `alerts.json` respaldado. De la primera solo se conserva el total (233), porque Slips borra el archivo al arrancar; su desglose (195 `Info`, 37 `Low` y una `High`) es el que registró Wazuh.
+
+La regla 100204 se probó con un registro sintético, porque el laboratorio no ha producido evidencias críticas: una evidencia `High` real a la que se cambió `threat_level` de `high` a `critical`. El registro original disparó la 100203 (nivel 9) y el modificado la 100204 (nivel 10).
+
+### Hallazgos de la corrida en vivo
+
+- **Slips repite la alerta.** Emitió 441 alertas sobre el mismo host en menos de ocho minutos (06:58 a 07:06 UTC), todas en la misma ventana de tiempo. Cada una sería un disparo de la respuesta. Falta una regla que agrupe las repeticiones por `srcip`.
+- **2.000 de las 2.004 evidencias `High` de la segunda corrida son falsos positivos.** Señalan a `pc1`, el equipo escaneado, como atacante, por «conexión a una IP privada fuera de la red local». La causa es la red local que Slips deduce mal (TD05, sección 7). Tres describen el escaneo real y la restante señala a la puerta de enlace por el mismo motivo.
+
+### Lo que no está validado todavía
+
+- una evidencia crítica real;
+- registros con IPv6, `Hostname` o `URL` en `Source` o `Target`;
+- el comportamiento del recolector ante ráfagas mayores: en una prueba aislada en que se volcaron 20.937 registros de una sola vez, el recolector informó «message queue is full» y se perdieron 2.606. En la corrida en vivo, con Slips escribiendo a su ritmo, no se perdió ninguno.
 
 ## 6. RITA
 
@@ -185,9 +291,29 @@ Los nombres exactos de las columnas de RITA y los umbrales de puntaje deben veri
 
 | Decisión | Alternativa descartada | Razón |
 |---|---|---|
-| Decodificador propio con expresiones regulares | Decodificador JSON nativo | El nativo no entrega la IP de `Source` como campo |
+| Decodificador propio que combina el plugin JSON con expresiones regulares | Decodificador JSON nativo | El nativo no entrega la IP de `Source` como campo |
+| Plugin JSON para los campos simples | Una expresión regular por campo | Menos expresiones que mantener; los campos conservan su nombre original y los campos nuevos de Slips aparecen sin cambiar el decodificador |
 | Prefijo `slips: ` con `out_format` | Distinguir por contenido del JSON | El decodificador JSON genérico captura cualquier línea que empiece con `{` |
+| Expresiones que toleran espacios (`:\s*`) | Expresiones para una sola forma del JSON | El recolector compacta el JSON y el probador de reglas no; una sola forma falla en uno de los dos |
 | `srcip` = atacante según Slips | `srcip` = origen técnico del flujo | Es la entidad que corresponde bloquear y coincide con lo que espera la respuesta activa |
+| Nivel crítico leído de `Note` | Leerlo de `Priority` | Slips escribe `High` en `Priority` para el nivel crítico |
+| Alerta detectada por texto (`match`) | Consultar el campo `Status` | Wazuh reserva `status` como campo estático y no lo admite en `<field>` |
 | Respuesta solo ante alertas de Slips | Respuesta ante evidencias con umbral de confianza | Las 25 evidencias que cumplían ese umbral eran falsos positivos; Slips ya agrega la evidencia antes de decidir |
 | Respuesta asociada a un grupo de reglas | Respuesta asociada a un nivel | Evita activar bloqueos al ajustar niveles |
 | Script intermedio para RITA | Leer la salida de RITA directamente | RITA no emite alertas en línea |
+
+## 8. Fuentes
+
+Formato de los registros:
+
+- *The Incident Detection Message Exchange Format version 2 (IDMEFv2)*, borrador IETF `draft-lehmann-idmefv2-03`. https://www.ietf.org/archive/id/draft-lehmann-idmefv2-03.txt
+- Código de Slips 1.1.23, https://github.com/stratosphereips/StratosphereLinuxIPS: `slips_files/common/idmefv2.py`, `slips_files/core/evidence_handler_worker.py` y `slips_files/core/evidence_logger.py`. Los números de línea citados corresponden a esa versión.
+
+Wazuh:
+
+- *Decoders syntax*. https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/decoders.html
+- *JSON decoder*. https://documentation.wazuh.com/current/user-manual/ruleset/decoders/json-decoder.html
+- Referencia de `localfile` (`out_format`). https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/localfile.html
+- Referencia de `active-response` y de `commands`. https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/active-response.html y https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/commands.html
+- Código de Wazuh, https://github.com/wazuh/wazuh: `src/logcollector/read_json.c` y `src/active-response/active_responses.c`, revisados en la etiqueta v4.14.1. El comportamiento del recolector se confirmó además en la versión 4.14.7 del laboratorio.
+- Ruleset instalado en el manager: `/var/ossec/ruleset/decoders/0010-active-response_decoders.xml`.

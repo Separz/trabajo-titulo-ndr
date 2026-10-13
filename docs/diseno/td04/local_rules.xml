@@ -1,44 +1,48 @@
-<!-- Reglas del NDR. Rango reservado para reglas locales: 100000-120000 -->
-<!-- Slips escribe dos tipos de registro en alerts.json: -->
-<!--   Event    = evidencia de un modulo (una observacion interpretada) -->
-<!--   Incident = alerta: la evidencia acumulada del host supero el umbral de Slips -->
+<!--Reglas propias del NDR. Rango reservado para reglas locales: 100000-120000
+    Este archivo contiene las reglas para clasificar los mensajes de
+    Slips segun Prioridad y Status, pasando de IDMEFv2 al formato de Wazuh -->
 <group name="slips,ndr,">
   <rule id="100200" level="3">
     <decoded_as>slips</decoded_as>
-    <description>Slips: $(slips.description)</description>
+    <field name="Analyzer.Name">^Slips$</field>
+    <description>Slips: $(Description)</description>
   </rule>
 
-  <!-- Alerta de Slips: decision sobre un host en una ventana de tiempo -->
-  <rule id="100210" level="12">
+    <!--Evidencia low-->
+    <rule id="100201" level="5">
     <if_sid>100200</if_sid>
-    <field name="slips.status">^Incident$</field>
-    <description>Slips (alerta sobre el host $(srcip)): $(slips.description)</description>
-    <group>ndr_respuesta,</group>
-  </rule>
+    <field name="Priority">^Low$</field>
+    <description>Slips (evidencia baja): $(Description)</description>
 
-  <!-- Evidencias: se registran con un nivel segun su amenaza, pero no disparan respuesta -->
-  <rule id="100201" level="5">
-    <if_sid>100200</if_sid>
-    <field name="slips.status">^Event$</field>
-    <field name="slips.priority">^Low$</field>
-    <description>Slips (evidencia baja): $(slips.description)</description>
-  </rule>
+    </rule>
+
+  <!--Evidencia medium-->
   <rule id="100202" level="7">
     <if_sid>100200</if_sid>
-    <field name="slips.status">^Event$</field>
-    <field name="slips.priority">^Medium$</field>
-    <description>Slips (evidencia media): $(slips.description)</description>
+    <field name="Priority">^Medium$</field>
+    <description>Slips (evidencia media): $(Description)</description>
   </rule>
+
+  <!--Evidencia high-->
   <rule id="100203" level="9">
     <if_sid>100200</if_sid>
-    <field name="slips.status">^Event$</field>
-    <field name="slips.priority">^High$</field>
-    <description>Slips (evidencia alta): $(slips.description)</description>
+    <field name="Priority">^High$</field>
+    <description>Slips (evidencia alta): $(Description)</description>
+
   </rule>
+
+  <!--Evidencia critical. Slips la escribe con Priority High, el nivel real queda en Note-->
   <rule id="100204" level="10">
+    <if_sid>100203</if_sid>
+    <field name="Note" type="pcre2">"threat_level":\s*"critical"</field>
+    <description>Slips (evidencia crítica): $(Description)</description>
+  </rule>
+
+  <!--Alerta slips Incident-->
+  <rule id="100210" level="12">
     <if_sid>100200</if_sid>
-    <field name="slips.status">^Event$</field>
-    <field name="slips.priority">^Critical$</field>
-    <description>Slips (evidencia critica): $(slips.description)</description>
+    <match type="pcre2">"Status":\s*"Incident"</match>
+    <description>Slips: alerta sobre el equipo $(srcip)</description>
+    <group>ndr_respuesta,</group>
   </rule>
 </group>

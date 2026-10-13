@@ -1,71 +1,30 @@
-<!-- Decodificador de las alertas de Slips (formato IDMEFv2, version 2.D.V03) -->
-<!-- El prefijo "slips: " lo agrega el logcollector con out_format en ossec.conf -->
+<!--Decodificador de los registros de Slips (IDMEFv2)-->
+<!--El prefijo "slips: " lo agrega el logcolletor con out_format en ossec.conf-->
 <decoder name="slips">
   <prematch>^slips: </prematch>
 </decoder>
 
+<!--Decodificador de los campos de Slips (IDMEFv2)-->
+<decoder name="slips_campos">
+  <!--solo evalua si el padre reconoce la linea-->
+  <parent>slips</parent>
+  <!--hasta donde llega el prefijo-->
+  <prematch>^slips: </prematch>
+  <!--despues del prefijo, se aplica el decodificador JSON-->
+  <plugin_decoder offset="after_prematch">JSON_Decoder</plugin_decoder>
+</decoder>
+
+<!--Decodificador para el campo de IP de origen-->
 <decoder name="slips_campos">
   <parent>slips</parent>
-  <regex type="pcre2">"Source": \[\{"IP": "([^"]+)"</regex>
+  <regex type="pcre2">"Source":\s*\[\{"IP":\s*"([^"]+)"</regex>
   <order>srcip</order>
 </decoder>
 
+<!--Decodificador para el campo de IP de destino-->
 <decoder name="slips_campos">
   <parent>slips</parent>
-  <regex type="pcre2">"Target": \[\{"IP": "([^"]+)"</regex>
+  <regex type="pcre2">"Target":\s*\[\{"IP":\s*"([^"]+)"</regex>
   <order>dstip</order>
 </decoder>
 
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"Status": "(\w+)"</regex>
-  <order>slips.status</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"Priority": "(\w+)"</regex>
-  <order>slips.priority</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"Confidence": ([\d.]+)</regex>
-  <order>slips.confidence</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"Description": "([^"]+)"</regex>
-  <order>slips.description</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"ID": "([^"]+)"</regex>
-  <order>slips.id</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"StartTime": "([^"]+)"</regex>
-  <order>slips.start_time</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">"Method": \["(\w+)"\]</regex>
-  <order>slips.method</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">\\"timewindow\\": (\d+)</regex>
-  <order>slips.timewindow</order>
-</decoder>
-
-<decoder name="slips_campos">
-  <parent>slips</parent>
-  <regex type="pcre2">\\"uids\\": \[\\"([^\\"]+)\\"</regex>
-  <order>slips.uid</order>
-</decoder>

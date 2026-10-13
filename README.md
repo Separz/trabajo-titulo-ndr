@@ -90,7 +90,14 @@ cp configs/wazuh/docker-compose.override.yml wazuh-docker/single-node/
 cd wazuh-docker/single-node && docker compose up -d
 ```
 
-El archivo `docker-compose.override.yml` conecta el manager a la red de gestión y le monta tres cosas: la carpeta de alertas de Slips, `ossec.conf` (con el bloque que lee `alerts.json`) y `local_rules.xml` (la regla 100200).
+El archivo `docker-compose.override.yml` conecta el manager a la red de gestión y le monta cuatro cosas:
+
+- la carpeta de alertas de Slips;
+- `ossec.conf`, con el bloque que lee `alerts.json` y antepone el prefijo `slips: ` a cada línea;
+- `local_decoder.xml`, el decodificador que reconoce ese prefijo y extrae `srcip` y `dstip`;
+- `local_rules.xml`, las reglas 100200 a 100210, que asignan un nivel a cada registro.
+
+El manager copia estos archivos a `/var/ossec/etc/` solo al crear el contenedor. Después de editarlos hay que recrearlo (`docker compose up -d --force-recreate wazuh.manager`); un `restart` no basta. El diseño está en `docs/diseno/TD04-decodificador.md`.
 
 ### 3. Slips
 
@@ -104,6 +111,8 @@ docker exec -it clab-ndr-lab-slips bash
 - `-c` usa la configuración de `configs/slips/slips.yaml`, que la topología monta en el contenedor.
 - `-g` lee un directorio de Zeek que sigue creciendo y exige indicar una interfaz con `-i`.
 - `current` es un enlace simbólico y Slips 1.1.23 no lo reconoce como directorio, por eso se pasa la ruta resuelta con `readlink -f`.
+
+Slips borra `alerts.json` al arrancar y vuelve a leer la carpeta de Zeek desde el principio. Para conservar una corrida hay que copiar el archivo antes de iniciar la siguiente. Se detiene con Ctrl+C o al cerrar la terminal.
 
 ### Detener todo
 
@@ -128,16 +137,27 @@ sudo tcpdump -ni zeek-eth1 -c 10 'tcp port 80'
 # 3. Slips genera alertas
 wc -l logs/slips/live/alerts/alerts.json
 
-# 4. Wazuh las convierte con la regla 100200
-docker exec single-node-wazuh.manager-1 grep -c '"id":"100200"' /var/ossec/logs/alerts/alerts.json
+# 4. Wazuh las recibe: cuántas alertas generó cada regla de Slips (100200 a 100210)
+docker exec single-node-wazuh.manager-1 grep -o '"id":"1002[0-9][0-9]"' /var/ossec/logs/alerts/alerts.json | sort | uniq -c
+
+# 5. Todas traen la IP del atacante como campo
+docker exec single-node-wazuh.manager-1 sh -c 'grep "\"id\":\"1002" /var/ossec/logs/alerts/alerts.json | grep -c "\"srcip\":"'
 ```
 
 En el paso 1 Zeek ve la IP interna real (10.10.10.12) y no la IP posterior al NAT (100.64.0.1): la captura queda antes de la traducción de direcciones.
 
-Una regla se puede probar sin esperar tráfico, pasando una alerta de referencia al probador de Wazuh:
+La suma del paso 4 debe igualar el conteo del paso 3, y el paso 5 debe dar esa misma suma. El archivo de alertas del manager es diario, así que la comparación vale para una corrida de Slips iniciada el mismo día y sin corridas anteriores.
+
+El beacon solo produce evidencias. Para provocar una alerta de Slips (regla 100210) sirve un escaneo de puertos dentro del segmento:
 
 ```bash
-head -1 tests/fixtures/slips-alerts-baseline.json | docker exec -i single-node-wazuh.manager-1 /var/ossec/bin/wazuh-logtest
+docker exec clab-ndr-lab-pc2 nmap -sS -p 1-2000 10.10.10.11
+```
+
+Una regla se puede probar sin esperar tráfico, pasando una alerta de referencia al probador de Wazuh. Hay que anteponerle el prefijo que en el flujo real agrega el recolector:
+
+```bash
+head -1 tests/fixtures/slips-alerts-baseline.json | sed 's/^/slips: /' | docker exec -i single-node-wazuh.manager-1 /var/ossec/bin/wazuh-logtest
 ```
 
 ## Prueba manual de bloqueo con reversión
@@ -152,6 +172,8 @@ docker exec clab-ndr-lab-fw nft delete element inet ndr blocklist '{ 10.10.10.12
 ## Limitaciones conocidas
 
 - **Slips se inicia a mano.** Es el único componente que `config-lab.sh` no arranca.
+- **El laboratorio no sobrevive a un reinicio del host.** Los contenedores vuelven a arrancar solos, pero sin los enlaces entre nodos, sin Zeek y sin Slips. Hay que repetir `containerlab deploy` y `config-lab.sh`, y volver a iniciar Slips.
+- **Slips repite la alerta sobre un mismo equipo.** En la corrida del 13-10 emitió 441 alertas sobre `pc2` en menos de ocho minutos. Wazuh todavía no agrupa esas repeticiones.
 - **Wazuh omite las alertas previas.** Si `alerts.json` aparece después de que el manager arrancó, este lo lee desde el final y solo procesa las alertas posteriores.
 - **Slips deduce mal la red local.** Con `-i eth0` toma la red de gestión (172.30.30.0/24) como red local y marca con severidad alta tráfico legítimo dentro del segmento 10.10.10.0/24.
 - **Slips no clasifica el beacon como C2** con la configuración por defecto. El modelo `ml_linear_model` sí marca esos flujos, pero con nivel bajo.
