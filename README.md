@@ -62,7 +62,7 @@ Linux, Docker, Containerlab y Open vSwitch (lo instala `host-prep.sh`). Con Wazu
 ```bash
 sudo ./scripts/host-prep.sh                  # una vez por host: OVS, bridge sw1, sysctl
 sudo containerlab deploy -t ndr-lab.clab.yml # crea nodos y enlaces, sin configuración de red
-sudo ./scripts/config-lab.sh                 # IPs, NAT, nginx, SPAN, Zeek y beacon
+sudo ./scripts/config-lab.sh                 # IPs, NAT, nginx, SPAN, interfaz de Slips, Zeek y beacon
 ```
 
 La configuración va en un paso posterior al deploy porque las interfaces conectadas al bridge OVS se reemplazan después del arranque de los nodos: una IP asignada con `exec` desaparece y un Zeek iniciado al arrancar queda escuchando una interfaz obsoleta. `config-lab.sh` es idempotente: puede repetirse sin duplicar IPs, Zeek ni beacons.
@@ -73,6 +73,7 @@ Al terminar, `config-lab.sh` muestra una verificación. Lo esperado es:
   SPAN       : OK
   pc1 -> fw  : OK
   pc1 -> C2  : HTTP 200
+  Slips red  : 10.10.10.254/24 en ndr0
 ```
 
 ### 2. Wazuh
@@ -105,11 +106,12 @@ Slips se inicia a mano dentro de su contenedor, en modo creciente sobre la corri
 
 ```bash
 docker exec -it clab-ndr-lab-slips bash
-./slips.py -c config/ndr-slips.yaml -g "$(readlink -f /zeek_logs/current)" -i eth0 -o /slips_output/live
+./slips.py -c config/ndr-slips.yaml -g "$(readlink -f /zeek_logs/current)" -i ndr0 -o /slips_output/live
 ```
 
 - `-c` usa la configuración de `configs/slips/slips.yaml`, que la topología monta en el contenedor.
 - `-g` lee un directorio de Zeek que sigue creciendo y exige indicar una interfaz con `-i`.
+- `-i ndr0` es una interfaz virtual que crea `config-lab.sh`, con la dirección `10.10.10.254/24` y sin tráfico. Con `-g`, Slips deduce la red local de esa interfaz e ignora `client_ips`; con `-i eth0` tomaría la red de gestión. Al arrancar debe mostrar `Local Net 10.10.10.0/24 (ndr0)`. El detalle está en `docs/diseno/TD06-despliegue-kubernetes.md`, sección «Red local de Slips».
 - `current` es un enlace simbólico y Slips 1.1.23 no lo reconoce como directorio, por eso se pasa la ruta resuelta con `readlink -f`.
 
 Slips borra `alerts.json` al arrancar y vuelve a leer la carpeta de Zeek desde el principio. Para conservar una corrida hay que copiar el archivo antes de iniciar la siguiente. Se detiene con Ctrl+C o al cerrar la terminal.
@@ -175,7 +177,7 @@ docker exec clab-ndr-lab-fw nft delete element inet ndr blocklist '{ 10.10.10.12
 - **El laboratorio no sobrevive a un reinicio del host.** Los contenedores vuelven a arrancar solos, pero sin los enlaces entre nodos, sin Zeek y sin Slips. Hay que repetir `containerlab deploy` y `config-lab.sh`, y volver a iniciar Slips.
 - **Slips repite la alerta sobre un mismo equipo.** En la corrida del 13-10 emitió 441 alertas sobre `pc2` en menos de ocho minutos. Wazuh todavía no agrupa esas repeticiones.
 - **Wazuh omite las alertas previas.** Si `alerts.json` aparece después de que el manager arrancó, este lo lee desde el final y solo procesa las alertas posteriores.
-- **Slips deduce mal la red local.** Con `-i eth0` toma la red de gestión (172.30.30.0/24) como red local y marca con severidad alta tráfico legítimo dentro del segmento 10.10.10.0/24.
+- **La red local de Slips depende de una interfaz virtual.** Con `-g`, Slips ignora `client_ips` y toma la red de la interfaz de `-i`. `config-lab.sh` crea `ndr0` para que esa red sea 10.10.10.0/24; sin ella, Slips toma la red de gestión (172.30.30.0/24) y marca con severidad alta tráfico legítimo del segmento. Es una adaptación propia, no documentada por Slips.
 - **Slips no clasifica el beacon como C2** con la configuración por defecto. El modelo `ml_linear_model` sí marca esos flujos, pero con nivel bajo.
 - **El SPAN de Open vSwitch no pierde paquetes bajo carga**, a diferencia de un puerto SPAN físico. Las mediciones del laboratorio no son comparables con producción en ese aspecto.
 - **RITA y MISP** aún no forman parte del laboratorio.
