@@ -106,16 +106,16 @@ La matriz define el comportamiento objetivo. Con los resultados actuales del lab
 - Slips repite la alerta sobre un mismo equipo: las 441 del 13-10 se emitieron en menos de ocho minutos y dentro de la misma ventana de tiempo. Sin agrupar, cada una dispararía la respuesta.
 - Slips no clasifica el beacon simulado como canal de mando y control. En la corrida del 13-10 con solo el beacon produjo 233 evidencias y ninguna alerta.
 - Slips deduce mal la red local del laboratorio y genera evidencia de amenaza alta sobre tráfico legítimo. El 13-10, 2.000 evidencias de nivel alto señalaron como atacante a `pc1`, el equipo escaneado. Ninguna alerta fue sobre `pc1`. La causa y la corrección están en TD06 («Red local de Slips»): en una corrida aislada con la red local corregida, esas evidencias desaparecieron y las alertas bajaron de 441 a 54.
-- De las 441 alertas del 13-10, 289 son copias exactas de otra, escritas por Slips 1.1.23 (TD04, sección 5).
+- De las 441 alertas del 13-10, 289 son copias exactas de otra, escritas por Slips 1.1.23 (TD04, sección 5). La 1.1.24, adoptada el 14-10, ya no escribe copias: sobre el mismo escaneo emitió 14 alertas distintas sobre `pc2`, cada una una sola vez.
 
 Antes de activar las filas 4 a 7 deben cumplirse cuatro condiciones:
 
 | # | Condición | Estado |
 |---|---|---|
-| 1 | Slips calibrado, con la red local declarada correctamente y su umbral de alerta ajustado con una tasa de falsos positivos medida sobre tráfico benigno | En curso: red local corregida y validada en una corrida aislada (TD06); falta validarla en vivo, ajustar el umbral y medir falsos positivos sobre tráfico benigno |
+| 1 | Slips calibrado, con la red local declarada correctamente y su umbral de alerta ajustado con una tasa de falsos positivos medida sobre tráfico benigno | En curso: red local corregida y validada en vivo el 14-10 (TD06); falta ajustar el umbral y medir falsos positivos sobre tráfico benigno |
 | 2 | Al menos una alerta real de Slips procesada de extremo a extremo, para confirmar su estructura | Cumplida el 13-10: las 441 alertas llegaron a Wazuh con `srcip`, nivel 12 y grupo `ndr_respuesta` (TD04, sección 5) |
 | 3 | Lista de exclusión cargada y probada | Pendiente |
-| 4 | Alertas repetidas sobre un mismo equipo agrupadas, de modo que la respuesta se dispare una vez por equipo y no una vez por alerta | Pendiente |
+| 4 | Alertas repetidas sobre un mismo equipo agrupadas, de modo que la respuesta se dispare una vez por equipo y no una vez por alerta | Pendiente. Las copias desaparecieron con Slips 1.1.24, pero siguen las alertas sucesivas: 14 sobre `pc2` en pocos minutos el 14-10 |
 
 Mientras tanto, las alertas de Slips se tratan con la fila 3: revisión manual.
 

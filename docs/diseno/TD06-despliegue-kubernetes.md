@@ -68,7 +68,7 @@ En el laboratorio ocurría lo mismo: con `-i eth0` Slips tomó la red de gestió
 
 Es una adaptación propia, no una configuración documentada por Slips. Depende de un detalle interno: si una versión futura cambia cómo se calcula la red local, puede dejar de funcionar. La imagen fijada por digest protege de ese cambio mientras no se actualice.
 
-**Validación.** Se ejecutó Slips 1.1.23 en un contenedor aislado sobre los logs de Zeek del escaneo del 13-10, con `-i ndr0` y la dirección `10.10.10.254/24`. Slips informó `Local Net 10.10.10.0/24 (ndr0)`.
+**Validación.** Se ejecutó Slips 1.1.23 en un contenedor aislado sobre los logs de Zeek del escaneo del 13-10, con `-i ndr0` y la dirección `10.10.10.254/24`. Slips informó `Local Net 10.10.10.0/24 (ndr0)`. El 14-10 se repitió en vivo en el laboratorio, con la 1.1.23 y luego con la 1.1.24 sobre el mismo escaneo, con el mismo resultado en la red local. En la 1.1.24, `localnet_handler.py` es idéntico al de la 1.1.23, así que la interfaz virtual sigue siendo necesaria.
 
 | | Original (`-i eth0`) | Con interfaz virtual (`-i ndr0`) |
 |---|---|---|
@@ -130,7 +130,7 @@ Los dos Deployment usan una réplica y estrategia `Recreate`, para que nunca hay
 
 ### Versiones fijadas
 
-Zeek y Slips se referencian por digest, el mismo de las imágenes probadas en el laboratorio (Zeek 9.0.0 y Slips 1.1.23). El agente Wazuh usa la etiqueta 4.14.7.
+Zeek y Slips se referencian por digest, el mismo de las imágenes probadas en el laboratorio (Zeek 9.0.0 y Slips 1.1.24). Slips pasó de la 1.1.23 a la 1.1.24 el 14-10, porque esta corrige las alertas duplicadas (TD04, sección 5). El agente Wazuh usa la etiqueta 4.14.7.
 
 ## 3. Recursos
 
@@ -196,5 +196,5 @@ Eso comprueba la estructura de los manifiestos, no su funcionamiento.
 | 5 | Registro del agente en el manager: nombre del servicio, puerto 1515 y contraseña de registro si el manager la exige | Depende del acceso administrativo a Wazuh |
 | 6 | Sincronización horaria: los contenedores usan el reloj del nodo | Confirmar que los nodos sincronizan por NTP |
 | 7 | Control de acceso al namespace `ndr` | Definir con el administrador qué cuentas pueden modificarlo |
-| 8 | Slips 1.1.23 escribe la misma alerta dos o tres veces (TD04, sección 5). La lista de cambios de la 1.1.24 incluye «Fix duplicate alerts» | Probar la 1.1.24 sobre los mismos logs de Zeek; si se adopta, revalidar el formato de `alerts.json` y actualizar el digest |
+| 8 | Resuelto el 14-10. Slips 1.1.23 escribía la misma alerta dos o tres veces; la 1.1.24 lo corrige y se adoptó (TD04, sección 5) | Digest actualizado en `ndr-lab.clab.yml` y `30-slips.yaml`; formato de `alerts.json` y decodificador revalidados en vivo |
 | 9 | `alpine:3.20`, usada por la tarea de retención, es una etiqueta de versión menor y no un digest. La rama 3.20 podría haber terminado su período de soporte | Verificar el soporte en el sitio de Alpine y fijarla por digest o pasar a una rama vigente |
