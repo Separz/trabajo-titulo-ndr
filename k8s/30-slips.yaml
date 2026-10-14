@@ -1,5 +1,6 @@
 # Slips y el agente Wazuh que envia sus alertas al manager
-# No usa hostNetwork ni capacidades: solo lee los logs que escribe Zeek
+# No usa hostNetwork: solo lee los logs que escribe Zeek
+# Un contenedor de inicio con NET_ADMIN crea la interfaz virtual de la red local; Slips corre sin capacidades
 # Corre en el nodo de captura porque comparte con Zeek un volumen local
 apiVersion: apps/v1
 kind: Deployment
@@ -29,6 +30,34 @@ spec:
                   - key: ndr/captura
                     operator: In
                     values: ["true"]
+      # Con -g, Slips toma la red local de la interfaz que recibe en -i e ignora client_ips.
+      # eth0 del pod pertenece a la red del cluster, asi que se crea una interfaz virtual
+      # con una direccion del segmento vigilado (ver TD06, "Red local de Slips").
+      # La interfaz queda en el espacio de red del pod y la usa el contenedor de Slips.
+      initContainers:
+        - name: red-local
+          # La misma imagen de Slips, que ya incluye la herramienta ip
+          image: stratosphereips/slips@sha256:c739b717e5aec6eef3a88a860e926df8960f12f21a4d45a86f3c9e7e70de4ca5
+          command: ["sh", "-c"]
+          args:
+            - |
+              ip link show ndr0 >/dev/null 2>&1 || ip link add ndr0 type dummy
+              ip addr replace CAMBIAR_IP_RED_LOCAL dev ndr0
+              ip link set ndr0 up
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              # NET_ADMIN para crear la interfaz y asignarle la direccion
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
       containers:
         - name: slips
           # Version fijada por digest (Slips 1.1.23)
@@ -40,8 +69,9 @@ spec:
               # Esperar a que Zeek cree su carpeta de trabajo
               until [ -e /zeek_logs/current ]; do sleep 5; done
               # Slips no acepta un enlace simbolico como directorio: se pasa la ruta resuelta
+              # -i ndr0: interfaz virtual creada por el contenedor de inicio red-local
               exec ./slips.py -c config/ndr-slips.yaml \
-                -g "$(readlink -f /zeek_logs/current)" -i eth0 -o /slips_output/live
+                -g "$(readlink -f /zeek_logs/current)" -i ndr0 -o /slips_output/live
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
