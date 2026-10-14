@@ -251,8 +251,11 @@ La regla 100204 se probó con un registro sintético, porque el laboratorio no h
 
 ### Hallazgos de la corrida en vivo
 
-- **Slips repite la alerta.** Emitió 441 alertas sobre el mismo host en menos de ocho minutos (06:58 a 07:06 UTC), todas en la misma ventana de tiempo. Cada una sería un disparo de la respuesta. Falta una regla que agrupe las repeticiones por `srcip`.
-- **2.000 de las 2.004 evidencias `High` de la segunda corrida son falsos positivos.** Señalan a `pc1`, el equipo escaneado, como atacante, por «conexión a una IP privada fuera de la red local». La causa es la red local que Slips deduce mal (TD05, sección 7). Tres describen el escaneo real y la restante señala a la puerta de enlace por el mismo motivo.
+- **Slips repite la alerta.** Emitió 441 alertas sobre el mismo host en menos de ocho minutos (06:58 a 07:06 UTC), todas en la misma ventana de tiempo. Cada una sería un disparo de la respuesta. Falta una regla que agrupe las repeticiones por `srcip`. Son dos fenómenos distintos:
+  - **Copias.** Solo hay 152 conjuntos distintos de evidencias (`CorrelID`): 143 aparecen tres veces, 3 dos veces y 6 una vez, en el mismo segundo y con distinto `ID`. Son 289 copias. El 09-10 ocurrió lo mismo (306 alertas distintas, 230 por triplicado). La causa probable es que Slips procesa las evidencias con tres procesos en paralelo (`DEFAULT_EVIDENCE_HANDLER_WORKERS = 3`, `slips_files/core/evidence_handler.py`, línea 48) sin nada que coordine la decisión de alertar; es una inferencia a partir del código y del patrón, no demostrada con un experimento. La lista de cambios de Slips 1.1.24 incluye «Fix duplicate alerts» (TD06, punto abierto 8).
+  - **Alertas sucesivas.** Después de cada alerta, Slips descarta las evidencias que ya la formaron y vuelve a acumular (`evidence_handler_worker.py`, líneas 237-282); con el escaneo, el umbral se vuelve a superar cada uno o dos segundos. Es su funcionamiento normal cuando su bloqueo propio está desactivado, porque ese bloqueo es lo que corta las alertas siguientes (`handle_new_alert`, líneas 365-399).
+- **2.000 de las 2.004 evidencias `High` de la segunda corrida son falsos positivos.** Señalan a `pc1`, el equipo escaneado, como atacante, por «conexión a una IP privada fuera de la red local». La causa es la red local que Slips deduce mal (TD05, sección 7). Tres describen el escaneo real y la restante señala a la puerta de enlace por el mismo motivo. Las evidencias de ese tipo aportaron cerca del 83 % del puntaje que disparó las alertas sobre `pc2`, contra un 0,5 % de la detección del escaneo, en una estimación de nivel de amenaza por confianza.
+- **Con la red local corregida, ambos efectos se reducen.** En una corrida aislada sobre los mismos logs, con la interfaz virtual de TD06 («Red local de Slips»), desaparecieron las evidencias de conexión fuera de la red local, quedaron 3 evidencias `High` (las del escaneo) y Slips emitió 54 alertas en vez de 441: 18 distintas, cada una por triplicado.
 
 ### Lo que no está validado todavía
 
@@ -298,6 +301,7 @@ Los nombres exactos de las columnas de RITA y los umbrales de puntaje deben veri
 | `srcip` = atacante según Slips | `srcip` = origen técnico del flujo | Es la entidad que corresponde bloquear y coincide con lo que espera la respuesta activa |
 | Nivel crítico leído de `Note` | Leerlo de `Priority` | Slips escribe `High` en `Priority` para el nivel crítico |
 | Alerta detectada por texto (`match`) | Consultar el campo `Status` | Wazuh reserva `status` como campo estático y no lo admite en `<field>` |
+| Red local de Slips declarada con una interfaz virtual (detalle en TD06) | Analizar con `-f`, donde `client_ips` se respeta | Con `-g` Slips ignora `client_ips`; `-f` es por lotes y su latencia no es compatible con la respuesta automática |
 | Respuesta solo ante alertas de Slips | Respuesta ante evidencias con umbral de confianza | Las 25 evidencias que cumplían ese umbral eran falsos positivos; Slips ya agrega la evidencia antes de decidir |
 | Respuesta asociada a un grupo de reglas | Respuesta asociada a un nivel | Evita activar bloqueos al ajustar niveles |
 | Script intermedio para RITA | Leer la salida de RITA directamente | RITA no emite alertas en línea |
