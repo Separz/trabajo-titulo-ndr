@@ -34,7 +34,7 @@ flowchart LR
 | pc1 | `ghcr.io/hellt/network-multitool` | Equipo gestionado |
 | pc2 | `ghcr.io/hellt/network-multitool` | Equipo no gestionado con beaconing |
 | zeek | `zeek/zeek` 9.0.0 | Captura pasiva y generación de logs |
-| slips | `stratosphereips/slips` 1.1.23 | Análisis de comportamiento |
+| slips | `stratosphereips/slips` 1.1.24 | Análisis de comportamiento |
 
 Zeek, Slips y `network-multitool` se referencian por digest en `ndr-lab.clab.yml`, para que cada corrida use exactamente la misma imagen. Son los mismos digest de Zeek y Slips que usan los manifiestos de `k8s/`.
 
@@ -112,7 +112,7 @@ docker exec -it clab-ndr-lab-slips bash
 - `-c` usa la configuración de `configs/slips/slips.yaml`, que la topología monta en el contenedor.
 - `-g` lee un directorio de Zeek que sigue creciendo y exige indicar una interfaz con `-i`.
 - `-i ndr0` es una interfaz virtual que crea `config-lab.sh`, con la dirección `10.10.10.254/24` y sin tráfico. Con `-g`, Slips deduce la red local de esa interfaz e ignora `client_ips`; con `-i eth0` tomaría la red de gestión. Al arrancar debe mostrar `Local Net 10.10.10.0/24 (ndr0)`. El detalle está en `docs/diseno/TD06-despliegue-kubernetes.md`, sección «Red local de Slips».
-- `current` es un enlace simbólico y Slips 1.1.23 no lo reconoce como directorio, por eso se pasa la ruta resuelta con `readlink -f`.
+- `current` es un enlace simbólico y Slips no lo reconoce como directorio (comprobado en 1.1.23), por eso se pasa la ruta resuelta con `readlink -f`.
 
 Slips borra `alerts.json` al arrancar y vuelve a leer la carpeta de Zeek desde el principio. Para conservar una corrida hay que copiar el archivo antes de iniciar la siguiente. Se detiene con Ctrl+C o al cerrar la terminal.
 

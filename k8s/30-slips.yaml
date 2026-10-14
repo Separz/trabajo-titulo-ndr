@@ -37,7 +37,7 @@ spec:
       initContainers:
         - name: red-local
           # La misma imagen de Slips, que ya incluye la herramienta ip
-          image: stratosphereips/slips@sha256:c739b717e5aec6eef3a88a860e926df8960f12f21a4d45a86f3c9e7e70de4ca5
+          image: stratosphereips/slips@sha256:110676362ed3129ba330a8c5acd480e454aa60499e608e3d15faf8a066b22bed
           command: ["sh", "-c"]
           args:
             - |
@@ -60,8 +60,8 @@ spec:
               memory: 64Mi
       containers:
         - name: slips
-          # Version fijada por digest (Slips 1.1.23)
-          image: stratosphereips/slips@sha256:c739b717e5aec6eef3a88a860e926df8960f12f21a4d45a86f3c9e7e70de4ca5
+          # Version fijada por digest (Slips 1.1.24)
+          image: stratosphereips/slips@sha256:110676362ed3129ba330a8c5acd480e454aa60499e608e3d15faf8a066b22bed
           workingDir: /StratosphereLinuxIPS
           command: ["bash", "-c"]
           args:
