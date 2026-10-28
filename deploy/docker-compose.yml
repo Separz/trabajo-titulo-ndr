@@ -1,0 +1,23 @@
+services:
+
+  # Se define el servicio para el sensor Zeek que se ejecutará en el una maquina aparte
+  # y capturará el tráfico de la interfaz física conectada al puerto espejo del switch.
+  zeek:
+    # Version fijada por digest (Zeek 9.0.0)
+    image: zeek/zeek@sha256:70733f4e540ba1608e37e00c6a93d009f79734262c9ec2ba09d90aa9abc16de5
+    command: ["bash", "/scripts/start.sh"]
+    network_mode: host                # captura directa en la NIC fisica
+    environment:
+      IFACE: ${IFACE:?definir IFACE en deploy/.env}   # NIC conectada al puerto espejo
+     # NIC conectada al puerto espejo
+    cap_drop: [ALL]
+    cap_add: [NET_RAW, NET_ADMIN]     # mismos permisos que en k8s/20-zeek.yaml
+    tmpfs: [/run]                     # /run vacio en cada reinicio: sin PID antiguo
+    volumes:
+      - ../configs/zeek/start.sh:/scripts/start.sh:ro
+      - ${LOGS_DIR:-/srv/ndr/zeek}:/logs
+    healthcheck:                      # equivalente a la livenessProbe
+      test: ["CMD-SHELL", "kill -0 \"$(cat /run/zeek.pid)\""]
+      interval: 30s
+      start_period: 15s
+    restart: unless-stopped
