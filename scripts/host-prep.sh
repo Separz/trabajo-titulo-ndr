@@ -56,5 +56,9 @@ ovs-vsctl --may-exist add-br "$BRIDGE"
 # 6. Ajuste que exige el indexer de Wazuh (se pierde al reiniciar el host)
 sysctl -w vm.max_map_count=262144
 
-mkdir -p logs/zeek logs/slips
+mkdir -p logs/zeek logs/slips/live/alerts
+# Wazuh lee desde el final un archivo que no existia al arrancar y perderia las primeras alertas de Slips.
+# Si ya existe, cuando Slips lo recrea Wazuh lo trata como rotacion y lo lee desde el inicio
+touch logs/slips/live/alerts/alerts.json
+
 echo "Host listo. Siguiente: sudo containerlab deploy -t ndr-lab.clab.yml"

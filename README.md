@@ -100,6 +100,8 @@ El archivo `docker-compose.override.yml` conecta el manager a la red de gestión
 
 El manager copia estos archivos a `/var/ossec/etc/` solo al crear el contenedor. Después de editarlos hay que recrearlo (`docker compose up -d --force-recreate wazuh.manager`); un `restart` no basta. El diseño está en `docs/diseno/TD04-decodificador.md`.
 
+El archivo logs/slips/live/alerts/alerts.json debe existir antes de levantar Wazuh; host-prep.sh lo crea.
+
 ### 3. Slips
 
 Slips se inicia a mano dentro de su contenedor, en modo creciente sobre la corrida actual de Zeek:
