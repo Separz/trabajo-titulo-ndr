@@ -5,6 +5,7 @@ services:
   zeek:
     # Version fijada por digest (Zeek 9.0.1)
     image: zeek/zeek@sha256:524cb0ce29f26a6a954fb9c357a8f92b95812476d8240f0ece26617ace249dd0
+
     command: ["bash", "/scripts/start.sh"]
     network_mode: host                # captura directa en la NIC fisica
     environment:
@@ -13,6 +14,16 @@ services:
     cap_drop: [ALL]
     cap_add: [NET_RAW, NET_ADMIN]     # mismos permisos que en k8s/20-zeek.yaml
     tmpfs: [/run]                     # /run vacio en cada reinicio: sin PID antiguo
+    deploy:
+      resources:
+        # Limites de recursos para el contenedor
+        limits:
+          cpus: '6'
+          memory: 6G
+        # Minimos para que compose no mate el contenedor si el host esta muy cargado
+        reservations:
+          cpus: '4'
+          memory: 2G
     volumes:
       - ../configs/zeek/start.sh:/scripts/start.sh:ro
       - ${LOGS_DIR:-/srv/ndr/zeek}:/logs
