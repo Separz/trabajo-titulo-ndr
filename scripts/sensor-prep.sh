@@ -67,11 +67,13 @@ if [ -n "$MGMT_IFACE" ]; then
   [ "$MGMT_IFACE" != "$IFACE" ] || fail "MGMT_IFACE debe ser distinta de IFACE"
 fi
 
+echo ""
 echo "[1/6] Paquetes base"
 apt-get update
 apt-get install -y ca-certificates curl git ethtool tcpdump chrony
 
 # Procedimiento oficial: https://docs.docker.com/engine/install/debian/
+echo ""
 echo "[2/6] Repositorio de Docker"
 install -m 0755 -d /etc/apt/keyrings
 # Descarga la llave de Docker solo si no existe o esta vacia
@@ -89,6 +91,7 @@ Architectures: $(dpkg --print-architecture)
 Signed-By: $DOCKER_KEY
 EOF
 
+echo ""
 echo "[3/6] Docker Engine y Compose"
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -99,6 +102,7 @@ systemctl enable --now docker
 # ethtool no persiste tras un reinicio ni tras reconectar la NIC
 # El servicio queda ligado al dispositivo: se ejecuta cada vez que la interfaz aparece tambien si es USB
 # LRO se ignora si falla porque no todas las NIC lo implementan
+echo ""
 echo "[4/6] NIC de captura ($IFACE): GRO y LRO desactivados cada vez que aparece"
 DISPOSITIVO_NIC="sys-subsystem-net-devices-$IFACE.device"
 cat > "$SERVICIO_NIC" <<EOF
@@ -122,6 +126,7 @@ systemctl daemon-reload
 systemctl reenable ndr-nic-captura.service
 systemctl restart ndr-nic-captura.service
 
+echo ""
 echo "[5/6] Carpeta de logs e imagen de Zeek"
 mkdir -p "$LOGS_DIR"
 docker compose -f deploy/docker-compose.yml pull
@@ -130,6 +135,7 @@ docker compose -f deploy/docker-compose.yml pull
 # Sin esto el cliente DHCP del propio sensor aparece en la captura
 # Va al final porque puede cortar la red, y solo se aplica si existe otra interfaz
 # para administrar el equipo (MGMT_IFACE)
+echo ""
 echo "[6/6] NIC de captura ($IFACE): sin ip ni DHCP"
 # Si no se define MGMT_IFACE, IFACE conserva su configuracion de red
 if [ -z "$MGMT_IFACE" ]; then
