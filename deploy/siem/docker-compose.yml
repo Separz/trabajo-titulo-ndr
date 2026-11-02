@@ -1,7 +1,8 @@
 # Override del despliegue single-node oficial de wazuh-docker para el host SIEM
 # Se copia a wazuh-docker/single-node/ y Compose lo combina con docker-compose.yml
-# NDR_DIR debe apuntar a la raiz de este repo; SLIPS_DIR a la salida de Slips (deploy/siem/slips.yml)
-# Ej: export NDR_DIR=$HOME/TRABAJO-TITULO/NDR
+# NDR_DIR y SLIPS_DIR se leen de deploy/siem/.env, el mismo que usa slips.yml
+# Como Compose se ejecuta desde wazuh-docker/single-node, ese .env se pasa explicito:
+#   docker compose --env-file "$NDR_DIR/deploy/siem/.env" up -d
 services:
   wazuh.manager:
     volumes:

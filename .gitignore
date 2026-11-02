@@ -16,3 +16,5 @@ wazuh-docker/
 # Extra
 notas/
 
+# Llave publica del host SIEM: propia de cada instalacion
+deploy/sensor/siem.pub
