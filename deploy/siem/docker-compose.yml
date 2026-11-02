@@ -1,0 +1,13 @@
+# Override del despliegue single-node oficial de wazuh-docker para el host SIEM
+# Se copia a wazuh-docker/single-node/ y Compose lo combina con docker-compose.yml
+# NDR_DIR debe apuntar a la raiz de este repo; SLIPS_DIR a la salida de Slips (deploy/siem/slips.yml)
+# Ej: export NDR_DIR=$HOME/TRABAJO-TITULO/NDR
+services:
+  wazuh.manager:
+    volumes:
+      # Alertas de Slips que lee el manager
+      - ${SLIPS_DIR:-/srv/ndr/slips}:/var/ossec/logs/slips:ro
+      # Lo que se monta en /wazuh-config-mount se copia a /var/ossec al iniciar el contenedor
+      - ${NDR_DIR:?definir NDR_DIR con la ruta del repositorio}/configs/wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf
+      - ${NDR_DIR}/configs/wazuh/local_rules.xml:/wazuh-config-mount/etc/rules/local_rules.xml
+      - ${NDR_DIR}/configs/wazuh/local_decoder.xml:/wazuh-config-mount/etc/decoders/local_decoder.xml

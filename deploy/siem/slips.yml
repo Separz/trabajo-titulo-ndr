@@ -1,0 +1,26 @@
+# Slips en el host SIEM, lee los logs de Zeek que llegan desde el sensor
+# y escribe alerts.json en la carpeta que lee el manager de Wazuh
+services:
+  # Equivale al initContainer red-local de k8s, crea ndr0 con una direccion del
+  # segmento vigilado y mantiene el espacio de red que comparte con Slips
+  slips-red:
+    image: stratosphereips/slips@sha256:110676362ed3129ba330a8c5acd480e454aa60499e608e3d15faf8a066b22bed
+    command: ["sh", "-c", "ip link show ndr0 >/dev/null 2>&1 || ip link add ndr0 type dummy; ip addr replace ${RED_LOCAL:?definir RED_LOCAL} dev ndr0; ip link set ndr0 up; exec sleep infinity"]
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    restart: unless-stopped
+
+  slips:
+    # Version fijada por digest (Slips 1.1.24)
+    image: stratosphereips/slips@sha256:110676362ed3129ba330a8c5acd480e454aa60499e608e3d15faf8a066b22bed
+    network_mode: "service:slips-red"
+    depends_on: [slips-red]
+    working_dir: /StratosphereLinuxIPS
+    # $$ evita que Compose interprete $( ) como variable
+    command: ["bash", "-c", "until [ -e /zeek_logs/current ]; do sleep 5; done; exec ./slips.py -c config/ndr-slips.yaml -g \"$$(readlink -f /zeek_logs/current)\" -i ndr0 -o /slips_output/live"]
+    cap_drop: [ALL]
+    volumes:
+      - ${ZEEK_LOGS:?ruta donde llegan los logs del sensor}:/zeek_logs:ro
+      - ${SLIPS_DIR:-/srv/ndr/slips}:/slips_output
+      - ../../configs/slips/slips.yaml:/StratosphereLinuxIPS/config/ndr-slips.yaml:ro
+    restart: unless-stopped
