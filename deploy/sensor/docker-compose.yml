@@ -1,6 +1,5 @@
 services:
-
-  # Se define el servicio para el sensor Zeek que se ejecutará en el una maquina aparte
+  # Se define el servicio para el sensor Zeek que se ejecutará en una maquina aparte
   # y capturará el tráfico de la interfaz física conectada al puerto espejo del switch.
   zeek:
     # Version fijada por digest (Zeek 9.0.1)
