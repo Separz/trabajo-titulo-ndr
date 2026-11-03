@@ -45,7 +45,9 @@ Hay dos planos separados. El plano de datos (10.10.10.0/24 y 100.64.0.0/24) es l
 | Ruta | Contenido |
 |---|---|
 | `ndr-lab.clab.yml` | Topología de Containerlab |
-| `scripts/` | Preparación del host, configuración del laboratorio y sesión SPAN |
+| `scripts/lab/` | Preparación del host, configuración del laboratorio y sesión SPAN |
+| `scripts/sensor-init-test/` | Preparación del sensor físico en Debian (`sensor-prep.sh`) |
+| `deploy/sensor/`, `deploy/siem/` | Despliegue fuera del laboratorio: Zeek en el sensor; Slips y Wazuh en el host SIEM |
 | `configs/` | Configuración de cada componente: firewall, Zeek, beacon, Slips y Wazuh |
 | `tests/fixtures/` | Alertas de Slips de referencia para probar las reglas de Wazuh |
 | `docs/` | Notas del laboratorio, bitácora y documentos de diseño |
@@ -60,9 +62,9 @@ Linux, Docker, Containerlab y Open vSwitch (lo instala `host-prep.sh`). Con Wazu
 ### 1. Laboratorio
 
 ```bash
-sudo ./scripts/host-prep.sh                  # una vez por host: OVS, bridge sw1, sysctl
+sudo ./scripts/lab/host-prep.sh              # una vez por host: OVS, bridge sw1, sysctl
 sudo containerlab deploy -t ndr-lab.clab.yml # crea nodos y enlaces, sin configuración de red
-sudo ./scripts/config-lab.sh                 # IPs, NAT, nginx, SPAN, interfaz de Slips, Zeek y beacon
+sudo ./scripts/lab/config-lab.sh             # IPs, NAT, nginx, SPAN, interfaz de Slips, Zeek y beacon
 ```
 
 La configuración va en un paso posterior al deploy porque las interfaces conectadas al bridge OVS se reemplazan después del arranque de los nodos: una IP asignada con `exec` desaparece y un Zeek iniciado al arrancar queda escuchando una interfaz obsoleta. `config-lab.sh` es idempotente: puede repetirse sin duplicar IPs, Zeek ni beacons.
@@ -124,7 +126,7 @@ Slips borra `alerts.json` al arrancar y vuelve a leer la carpeta de Zeek desde e
 cd wazuh-docker/single-node && docker compose down
 cd ../..
 sudo containerlab destroy -t ndr-lab.clab.yml --cleanup
-sudo ./scripts/span.sh off
+sudo ./scripts/lab/span.sh off
 ```
 
 ## Verificación del flujo

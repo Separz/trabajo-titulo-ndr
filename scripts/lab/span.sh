@@ -1,7 +1,7 @@
 #!/bin/bash
 # Administra la sesion SPAN del switch sw1 en Open vSwitch
 # Copia todo el trafico del switch hacia el puerto donde escucha Zeek
-# Uso: sudo ./scripts/span.sh [on|off|status]
+# Uso: sudo ./scripts/lab/span.sh [on|off|status]
 set -euo pipefail
 
 BRIDGE=sw1

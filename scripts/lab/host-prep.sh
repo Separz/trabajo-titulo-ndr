@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prepara el host para el laboratorio instalando Open vSwitch y creando el switch sw1
-# Se ejecuta una sola vez por host con "sudo ./scripts/host-prep.sh"
+# Se ejecuta una sola vez por host con "sudo ./scripts/lab/host-prep.sh"
 set -euo pipefail
 
 OVS_SOCKET=/run/openvswitch/db.sock
@@ -16,7 +16,7 @@ existe_programa() {
 }
 
 # Trabajar desde la raiz del repositorio se invoque desde donde se invoque
-RAIZ_REPO="$(dirname "$(readlink -f "$0")")/.."
+RAIZ_REPO="$(dirname "$(readlink -f "$0")")/../.."
 cd "$RAIZ_REPO"
 
 # 1. Instalar Open vSwitch segun la distribucion

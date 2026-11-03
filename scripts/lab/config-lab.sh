@@ -1,6 +1,6 @@
 #!/bin/bash
 # Configura el laboratorio despues de "containerlab deploy"
-# Uso: sudo ./scripts/config-lab.sh
+# Uso: sudo ./scripts/lab/config-lab.sh
 set -euo pipefail
 
 LAB=clab-ndr-lab
@@ -96,7 +96,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Trabajar desde la raiz del repositorio
-RAIZ_REPO="$(dirname "$(readlink -f "$0")")/.."
+RAIZ_REPO="$(dirname "$(readlink -f "$0")")/../.."
 cd "$RAIZ_REPO"
 
 echo "[1/7] Firewall (ips, reenvio, NAT, blocklist)"
@@ -113,7 +113,7 @@ if ! en_nodo inet pgrep -x nginx >/dev/null; then
 fi
 
 echo "[4/7] Sesion SPAN"
-./scripts/span.sh on
+./scripts/lab/span.sh on
 
 echo "[5/7] Interfaz de red local de Slips ($SLIPS_IFACE)"
 configurar_red_local_slips
