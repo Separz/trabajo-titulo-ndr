@@ -1,10 +1,11 @@
 #!/bin/bash
 # Prepara un equipo Debian como sensor del NDR:
-# - Instala Docker y descarga la imagen de Zeek
-# - Ajusta la NIC de captura (GRO, LRO, sin IP)
-# - Borra cada noche los logs de Zeek mas antiguos que RETENCION_DIAS
-# - Da al host SIEM acceso de solo lectura a los logs para que los traiga con rsync
-# Se ejecuta en el sensor, desde el repo clonado, con "sudo ./scripts/sensor-prep.sh"
+# 1.- Instala Docker y descarga la imagen de Zeek
+# 2.- Ajusta la NIC de captura (GRO, LRO, sin IP) para evitar union de paquetes y zeek analice sin perdida
+# 3.- Borra cada noche los logs de Zeek mas antiguos que RETENCION_DIAS
+# 4.- Da al host SIEM acceso de solo lectura a los logs para que los traiga con rsync
+# 5.- Configura el servicio de retencion para que se ejecute diariamente
+# Se ejecuta en el sensor, desde el repo clonado, con "sudo ./scripts/sensor-init-test/sensor-prep.sh"
 # Requiere deploy/sensor/.env con IFACE definido (ver deploy/sensor/.env.example)
 # Es idempotente y puede repetirse sin duplicar repositorios ni servicios
 
@@ -46,8 +47,8 @@ if [ "$(id -u)" -ne 0 ]; then
   fail "sensor-prep.sh requiere root. Ejecutar con: sudo $0"
 fi
 
-# Trabajar desde la raiz del repositorio se invoque desde donde se invoque
-RAIZ_REPO="$(dirname "$(readlink -f "$0")")/.."
+# Definir la raiz del repositorio segun la ubicacion actual del script, para poder ejecutarlo desde cualquier directorio
+RAIZ_REPO="$(dirname "$(readlink -f "$0")")/../.."
 cd "$RAIZ_REPO"
 
 # shellcheck source=/dev/null
@@ -227,6 +228,7 @@ else
   # \$IFACE queda literal: ifupdown la reemplaza por el nombre de la interfaz al ejecutar up y down
   mkdir -p /etc/network/interfaces.d
   cat > "$INTERFAZ_CAPTURA" <<EOF
+
 # Interfaz de captura del NDR: sin direccion, levantada y en modo promiscuo
 # allow-hotplug la levanta cuando aparece, tambien si es un adaptador USB que se reconecta
 allow-hotplug $IFACE
