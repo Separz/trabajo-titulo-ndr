@@ -21,6 +21,7 @@ SERVICIO_RETENCION=/etc/systemd/system/ndr-retencion-zeek.service
 TIMER_RETENCION=/etc/systemd/system/ndr-retencion-zeek.timer
 INTERFACES=/etc/network/interfaces
 INTERFAZ_CAPTURA=/etc/network/interfaces.d/ndr-captura
+INTERFAZ_GESTION=/etc/network/interfaces.d/ndr-gestion
 # Usuario con el que el host SIEM entra por SSH a leer los logs
 USUARIO_LOGS=ndr-logs
 HOME_LOGS=/var/lib/ndr-logs
@@ -201,7 +202,8 @@ fi
 # Un sensor pasivo no debe tener ip ni enviar trafico por la interfaz de captura
 # Sin esto el cliente DHCP del propio sensor aparece en la captura
 # Va al final porque puede cortar la red, y solo se aplica si existe otra interfaz
-# para administrar el equipo (MGMT_IFACE)
+# para administrar el equipo (MGMT_IFACE). Si MGMT_IFACE no tiene configuracion propia,
+# se le asigna DHCP en ndr-gestion
 echo ""
 echo "[8/8] NIC de captura ($IFACE): sin ip ni DHCP"
 # Si no se define MGMT_IFACE, IFACE conserva su configuracion de red
@@ -224,9 +226,36 @@ else
   # Agrega la linea de source al final del archivo principal si no existe
   grep -q '^source /etc/network/interfaces.d/\*' "$INTERFACES" || echo "source /etc/network/interfaces.d/*" >> "$INTERFACES"
 
+  mkdir -p /etc/network/interfaces.d
+
+  # Si una ejecucion anterior dejo como gestion a la NIC que ahora es de captura (roles invertidos), se quita
+  if grep -qsE "^[[:space:]]*iface[[:space:]]+$IFACE[[:space:]]" "$INTERFAZ_GESTION"; then
+    rm -f "$INTERFAZ_GESTION"
+  fi
+
+  # La NIC de gestion necesita su propia configuracion de red. Si solo estaba en ndr-captura
+  # (por ejemplo, al invertir los roles), se perderia al reescribir ese archivo y el sensor
+  # quedaria sin SSH tras el reinicio. Se busca una estrofa iface fuera de ndr-captura
+  gestion_configurada=no
+  for archivo in "$INTERFACES" /etc/network/interfaces.d/*; do
+    [ -f "$archivo" ] && [ "$archivo" != "$INTERFAZ_CAPTURA" ] || continue
+    if grep -qE "^[[:space:]]*iface[[:space:]]+$MGMT_IFACE[[:space:]]" "$archivo"; then
+      gestion_configurada=si
+    fi
+  done
+  # Si no hay ninguna, se configura por DHCP; una reserva en el servidor DHCP mantiene fija la IP
+  if [ "$gestion_configurada" = no ]; then
+    cat > "$INTERFAZ_GESTION" <<EOF
+
+# Interfaz de gestion del NDR: SSH y salida de los logs al SIEM
+allow-hotplug $MGMT_IFACE
+iface $MGMT_IFACE inet dhcp
+EOF
+    echo "  Gestion ($MGMT_IFACE) por DHCP en $INTERFAZ_GESTION"
+  fi
+
   # Crea la configuracion de la interfaz de captura; el texto entre EOF se escribe tal cual en el archivo
   # \$IFACE queda literal: ifupdown la reemplaza por el nombre de la interfaz al ejecutar up y down
-  mkdir -p /etc/network/interfaces.d
   cat > "$INTERFAZ_CAPTURA" <<EOF
 
 # Interfaz de captura del NDR: sin direccion, levantada y en modo promiscuo
