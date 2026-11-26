@@ -11,6 +11,8 @@ set -euo pipefail
 IFACE="${IFACE:?definir IFACE en deploy/sensor/.env}"
 PIDFILE=/run/zeek.pid
 DIR_LOGS=/logs
+# Filtro BPF opcional (sintaxis de tcpdump). Vacio: Zeek captura todo
+FILTRO_CAPTURA="${FILTRO_CAPTURA:-}"
 
 fail() {
   echo "ERROR: $1" >&2
@@ -33,6 +35,11 @@ echo $$ > "$PIDFILE"
 
 # -C -> no descarta paquetes con checksum invalido
 # -i -> interfaz de captura
+# -f -> filtro BPF; el kernel descarta lo filtrado antes de que llegue a Zeek,
+#       que anota el filtro instalado en packet_filter.log
 # local -> carga la politica local.zeek que trae la imagen
 # LogAscii::use_json=T -> escribe los logs en JSON en vez de TSV
+if [ -n "$FILTRO_CAPTURA" ]; then
+  exec zeek -C -i "$IFACE" -f "$FILTRO_CAPTURA" local "LogAscii::use_json=T"
+fi
 exec zeek -C -i "$IFACE" local "LogAscii::use_json=T"

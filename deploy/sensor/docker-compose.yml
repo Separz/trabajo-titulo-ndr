@@ -9,6 +9,7 @@ services:
     network_mode: host                # captura directa en la NIC fisica
     environment:
       IFACE: ${IFACE:?definir IFACE en deploy/sensor/.env}   # NIC conectada al puerto espejo
+      FILTRO_CAPTURA: ${FILTRO_CAPTURA:-}                    # filtro BPF opcional, vacio = todo
     cap_drop: [ALL]
     cap_add: [NET_RAW, NET_ADMIN]     # permite usar la red del host y capturar paquetes
     tmpfs: [/run]                     # /run vacio en cada reinicio: sin PID antiguo
