@@ -1,7 +1,7 @@
 #!/bin/bash
 # Prepara un equipo Debian como sensor del NDR:
 # 1.- Instala Docker y descarga la imagen de Zeek
-# 2.- Ajusta la NIC de captura (GRO, LRO, sin IP) para evitar union de paquetes y zeek analice sin perdida
+# 2.- Ajusta la NIC de captura (GRO, LRO, sin IP ni IPv6) para evitar union de paquetes y zeek analice sin perdida
 # 3.- Borra cada noche los logs de Zeek mas antiguos que RETENCION_DIAS
 # 4.- Da al host SIEM acceso de solo lectura a los logs para que los traiga con rsync
 # 5.- Configura el servicio de retencion para que se ejecute diariamente
@@ -205,7 +205,7 @@ fi
 # para administrar el equipo (MGMT_IFACE). Si MGMT_IFACE no tiene configuracion propia,
 # se le asigna DHCP en ndr-gestion
 echo ""
-echo "[8/8] NIC de captura ($IFACE): sin ip ni DHCP"
+echo "[8/8] NIC de captura ($IFACE): sin ip, IPv6 ni DHCP"
 # Si no se define MGMT_IFACE, IFACE conserva su configuracion de red
 if [ -z "$MGMT_IFACE" ]; then
   echo "  Omitido: MGMT_IFACE no esta definida en deploy/sensor/.env y $IFACE es la unica interfaz de administracion"
@@ -260,13 +260,23 @@ EOF
 
 # Interfaz de captura del NDR: sin direccion, levantada y en modo promiscuo
 # allow-hotplug la levanta cuando aparece, tambien si es un adaptador USB que se reconecta
+# pre-up desactiva IPv6 antes de levantarla: sin IPv6 el kernel no le asigna una
+# direccion fe80:: ni envia solicitudes de router por ella. La captura de IPv6 no cambia
+# Si el kernel no tiene IPv6, la ruta no existe y se omite: un pre-up fallido no levantaria la NIC
 allow-hotplug $IFACE
 iface $IFACE inet manual
+    pre-up [ ! -e /proc/sys/net/ipv6/conf/\$IFACE ] || echo 1 > /proc/sys/net/ipv6/conf/\$IFACE/disable_ipv6
     up ip link set \$IFACE up promisc on
     down ip link set \$IFACE promisc off down
 EOF
   echo "  Configurado en $INTERFAZ_CAPTURA (respaldo en $INTERFACES.ndr.bak)"
   echo "  Se aplica al reiniciar el equipo"
+
+  # IPv6 tambien se desactiva ahora, sin esperar al reinicio
+  # Se escribe en /proc en vez de usar sysctl para no depender de procps
+  if [ -e "/proc/sys/net/ipv6/conf/$IFACE/disable_ipv6" ]; then
+    echo 1 > "/proc/sys/net/ipv6/conf/$IFACE/disable_ipv6"
+  fi
 fi
 
 echo
@@ -275,6 +285,7 @@ printf "  Docker     : "; docker --version
 printf "  Compose    : "; docker compose version --short
 printf "  GRO        : "; ethtool -k "$IFACE" | awk '/generic-receive-offload/ {print $2}'
 printf "  LRO        : "; ethtool -k "$IFACE" | awk '/large-receive-offload/ {print $2}'
+printf "  Sin IPv6   : "; cat "/proc/sys/net/ipv6/conf/$IFACE/disable_ipv6" 2>/dev/null || echo "(IPv6 no disponible)"
   echo "  Captura    : $IFACE"
   echo "  Gestion    : ${MGMT_IFACE:-(no definida)}"
   echo "  Logs       : $LOGS_DIR"
