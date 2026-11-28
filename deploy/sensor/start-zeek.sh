@@ -37,9 +37,10 @@ echo $$ > "$PIDFILE"
 # -i -> interfaz de captura
 # -f -> filtro BPF; el kernel descarta lo filtrado antes de que llegue a Zeek,
 #       que anota el filtro instalado en packet_filter.log
+# /scripts/privacidad.zeek -> scripts de "local" que no se cargan; debe ir antes de local
 # local -> carga la politica local.zeek que trae la imagen
 # LogAscii::use_json=T -> escribe los logs en JSON en vez de TSV
 if [ -n "$FILTRO_CAPTURA" ]; then
-  exec zeek -C -i "$IFACE" -f "$FILTRO_CAPTURA" local "LogAscii::use_json=T"
+  exec zeek -C -i "$IFACE" -f "$FILTRO_CAPTURA" /scripts/privacidad.zeek local "LogAscii::use_json=T"
 fi
-exec zeek -C -i "$IFACE" local "LogAscii::use_json=T"
+exec zeek -C -i "$IFACE" /scripts/privacidad.zeek local "LogAscii::use_json=T"
