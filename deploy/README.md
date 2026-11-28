@@ -25,6 +25,8 @@ flowchart LR
 | Ruta | Contenido |
 |---|---|
 | `deploy/sensor/docker-compose.yml` | Zeek con `network_mode: host` sobre `IFACE` |
+| `deploy/sensor/start-zeek.sh` | Inicio de Zeek en el sensor: una carpeta `run-<fecha>` por arranque y filtro de captura opcional |
+| `deploy/sensor/privacidad.zeek` | Scripts de la política `local` de la imagen que el sensor no carga (`detect-MHR`) |
 | `deploy/sensor/.env.example` | Variables del sensor |
 | `deploy/siem/slips.yml` | Slips y el contenedor `slips-red`, que crea `ndr0` |
 | `deploy/siem/docker-compose.yml` | Override del compose single-node oficial de wazuh-docker |
@@ -60,11 +62,12 @@ Comprobado en local (rsync 3.5.0, 2026-11-02) simulando el comando forzado: la c
 
 | Variable | Uso |
 |---|---|
-| `IFACE` | NIC que recibe el tráfico espejado. Queda sin IP, en modo promiscuo y con GRO/LRO desactivados |
+| `IFACE` | NIC que recibe el tráfico espejado. Queda sin IP ni IPv6, en modo promiscuo y con GRO/LRO desactivados |
 | `MGMT_IFACE` | NIC de administración y de salida de los logs. Si está definida, `IFACE` pierde su IP al reiniciar |
 | `LOGS_DIR` | Carpeta de los logs de Zeek (`/srv/ndr/zeek`) |
 | `RETENCION_DIAS` | Días que se conservan los logs (30, igual que `k8s/40-retencion.yaml`) |
 | `SIEM_PUBKEY` | Llave pública SSH del host SIEM (`deploy/sensor/siem.pub`, ignorada por git) |
+| `FILTRO_CAPTURA` | Filtro BPF opcional que Zeek recibe con `-f`. Vacío: captura todo. Ej.: `not host <IP de gestión del sensor>` |
 
 ### Pasos
 
@@ -86,7 +89,7 @@ El script hace, en orden:
 5. Carpeta de logs e imagen de Zeek.
 6. Timer `ndr-retencion-zeek` (03:30): borra logs con más de `RETENCION_DIAS` días y las carpetas `run-*` vacías.
 7. Usuario `ndr-logs` con la llave del SIEM restringida a `rrsync -ro`. Se omite si falta `siem.pub`.
-8. `IFACE` sin IP ni DHCP en `/etc/network/interfaces.d/ndr-captura`, y DHCP para `MGMT_IFACE` en `ndr-gestion` si no tiene configuración propia. Se omite si `MGMT_IFACE` está vacía.
+8. `IFACE` sin IP, IPv6 ni DHCP en `/etc/network/interfaces.d/ndr-captura`, y DHCP para `MGMT_IFACE` en `ndr-gestion` si no tiene configuración propia. Se omite si `MGMT_IFACE` está vacía.
 
 Después del reinicio:
 
@@ -94,9 +97,12 @@ Después del reinicio:
 ip -br addr show <IFACE>                                        # sin IP
 ip -d link show <IFACE> | grep -o 'promiscuity [0-9]*'          # 1
 ethtool -k <IFACE> | grep -E 'generic-receive|large-receive'    # off
+cat /proc/sys/net/ipv6/conf/<IFACE>/disable_ipv6                # 1
 systemctl is-active ndr-nic-captura.service ndr-retencion-zeek.timer
 cd deploy/sensor && sudo docker compose up -d
 ls -l /srv/ndr/zeek/current                                     # apunta a un run-<fecha> nuevo
+cat /srv/ndr/zeek/current/packet_filter.log                     # el filtro de FILTRO_CAPTURA
+grep -c detect-MHR /srv/ndr/zeek/current/loaded_scripts.log     # 0
 ```
 
 ### Migración desde `deploy/docker-compose.yml`
@@ -191,4 +197,6 @@ sudo tcpreplay -i <nic> --preload-pcap --multiplier=<N> --stats=60 <archivo.pcap
 - **Un reinicio de Slips duplica alertas en Wazuh.** Slips borra `alerts.json` al arrancar y vuelve a leer la carpeta de Zeek desde el principio.
 - **Zeek no rota sus logs.** El timer de retención no borra un archivo en uso, así que cada log crece mientras Zeek no se reinicie.
 - **La copia de logs es manual.** Falta el timer de rsync en el host SIEM.
+- **Con `FILTRO_CAPTURA=not host <IP de gestión>`, el sensor no se vigila a sí mismo.** Si el propio sensor genera tráfico malicioso, el NDR no lo ve.
+- **El filtro por IP solo cubre IPv4 y ARP.** El tráfico IPv6 de la NIC de gestión, si lo hay, se sigue registrando.
 - **`configs/wazuh/ossec.conf` incluye la respuesta activa `ndr-bloqueo` del laboratorio.** Sin un agente en el firewall no tiene efecto.
